@@ -99,10 +99,12 @@ class EmailBillService:
                         item.transaction, item.marker, item.idempotency_key
                     )
                     imported += 1
-                self.outbox.mark_completed(item.idempotency_key, remote_id)
+                if not self.outbox.mark_completed(item.idempotency_key, remote_id):
+                    LOGGER.warning("lost lease before completing %s", item.marker)
             except Exception as exc:
                 failed += 1
-                self.outbox.mark_failed(item.idempotency_key, str(exc))
+                if not self.outbox.mark_failed(item.idempotency_key, str(exc)):
+                    LOGGER.warning("lost lease before failing %s", item.marker)
                 LOGGER.exception("failed to synchronize %s", item.marker)
 
         return RunSummary(

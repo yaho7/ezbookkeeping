@@ -59,6 +59,7 @@ class Outbox:
                 last_error TEXT NOT NULL DEFAULT '',
                 lease_owner TEXT NOT NULL DEFAULT '',
                 lease_until INTEGER NOT NULL DEFAULT 0,
+                retry_after INTEGER NOT NULL DEFAULT 0,
                 updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
             );
             """
@@ -68,6 +69,9 @@ class Outbox:
         )
         self._ensure_column(
             "transactions", "lease_until", "INTEGER NOT NULL DEFAULT 0"
+        )
+        self._ensure_column(
+            "transactions", "retry_after", "INTEGER NOT NULL DEFAULT 0"
         )
 
     def _ensure_column(self, table: str, column: str, definition: str) -> None:
@@ -169,17 +173,18 @@ class Outbox:
         try:
             row = self.connection.execute(
                 "SELECT idempotency_key, marker, transaction_json "
-                "FROM transactions WHERE status IN ('pending', 'failed') "
+                "FROM transactions WHERE status = 'pending' "
+                "OR (status = 'failed' AND retry_after <= ?) "
                 "OR (status = 'processing' AND lease_until <= ?) "
                 "ORDER BY rowid LIMIT 1",
-                (claimed_at,),
+                (claimed_at, claimed_at),
             ).fetchone()
             if row is None:
                 self.connection.commit()
                 return None
             self.connection.execute(
                 "UPDATE transactions SET status = 'processing', lease_owner = ?, "
-                "lease_until = ?, updated_at = CURRENT_TIMESTAMP "
+                "lease_until = ?, retry_after = 0, updated_at = CURRENT_TIMESTAMP "
                 "WHERE idempotency_key = ?",
                 (
                     self.worker_id,
@@ -197,7 +202,7 @@ class Outbox:
             transaction=_deserialize(row["transaction_json"]),
         )
 
-    def mark_completed(self, idempotency_key: str, remote_id: str) -> None:
+    def mark_completed(self, idempotency_key: str, remote_id: str) -> bool:
         with self.connection:
             row = self.connection.execute(
                 "SELECT message_key FROM transactions WHERE idempotency_key = ?",
@@ -205,13 +210,16 @@ class Outbox:
             ).fetchone()
             if row is None:
                 raise KeyError(idempotency_key)
-            self.connection.execute(
+            cursor = self.connection.execute(
                 "UPDATE transactions SET status = 'completed', remote_id = ?, "
                 "last_error = '', lease_owner = '', lease_until = 0, "
                 "updated_at = CURRENT_TIMESTAMP "
-                "WHERE idempotency_key = ?",
-                (remote_id, idempotency_key),
+                "WHERE idempotency_key = ? AND status = 'processing' "
+                "AND lease_owner = ?",
+                (remote_id, idempotency_key, self.worker_id),
             )
+            if cursor.rowcount == 0:
+                return False
             self.connection.execute(
                 "UPDATE messages SET status = 'completed', last_error = '', "
                 "updated_at = CURRENT_TIMESTAMP WHERE message_key = ? AND NOT EXISTS ("
@@ -219,12 +227,28 @@ class Outbox:
                 "AND status != 'completed')",
                 (row["message_key"], row["message_key"]),
             )
+        return True
 
-    def mark_failed(self, idempotency_key: str, error: str) -> None:
+    def mark_failed(
+        self,
+        idempotency_key: str,
+        error: str,
+        now: int | None = None,
+        retry_delay_seconds: int = 300,
+    ) -> bool:
+        failed_at = int(time.time()) if now is None else now
         with self.connection:
-            self.connection.execute(
+            cursor = self.connection.execute(
                 "UPDATE transactions SET status = 'failed', last_error = ?, "
-                "lease_owner = '', lease_until = 0, updated_at = CURRENT_TIMESTAMP "
-                "WHERE idempotency_key = ?",
-                (error[:2000], idempotency_key),
+                "lease_owner = '', lease_until = 0, retry_after = ?, "
+                "updated_at = CURRENT_TIMESTAMP "
+                "WHERE idempotency_key = ? AND status = 'processing' "
+                "AND lease_owner = ?",
+                (
+                    error[:2000],
+                    failed_at + retry_delay_seconds,
+                    idempotency_key,
+                    self.worker_id,
+                ),
             )
+        return cursor.rowcount == 1

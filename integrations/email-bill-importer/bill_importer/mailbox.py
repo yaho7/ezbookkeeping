@@ -76,17 +76,29 @@ def _fingerprint(message: Message, received_at: datetime, text: str) -> str:
     return hashlib.sha256(identity.encode("utf-8", errors="replace")).hexdigest()
 
 
-def _has_bank_authentication_result(message: Message) -> bool:
+def _has_bank_authentication_result(
+    message: Message, trusted_authserv_domains: Sequence[str]
+) -> bool:
     authentication_results = message.get_all("Authentication-Results", [])
     if not authentication_results:
         return False
     result = " ".join(str(authentication_results[0]).lower().split())
+    authserv_tokens = result.partition(";")[0].strip().split()
+    if not authserv_tokens:
+        return False
+    authserv_id = authserv_tokens[0].rstrip(".")
+    if not any(
+        authserv_id == domain or authserv_id.endswith(f".{domain}")
+        for domain in trusted_authserv_domains
+    ):
+        return False
+    bank_domain = r"(?:message\.)?cmbchina\.com(?=[\s;]|$)"
     dkim_passed = re.search(
-        r"\bdkim=pass\b.*?\bheader\.(?:d|i)=(?:@)?(?:message\.)?cmbchina\.com\b",
+        rf"\bdkim=pass\b.*?\bheader\.(?:d|i)=(?:@)?{bank_domain}",
         result,
     )
     spf_passed = re.search(
-        r"\bspf=pass\b.*?\bsmtp\.mailfrom=[^\s;]*@(?:message\.)?cmbchina\.com\b",
+        rf"\bspf=pass\b.*?\bsmtp\.mailfrom=(?:[^@\s;]+@)?{bank_domain}",
         result,
     )
     return dkim_passed is not None or spf_passed is not None
@@ -113,10 +125,13 @@ class ImapMailbox:
                             subject_keyword.encode("utf-8"),
                         )
                     except (imaplib.IMAP4.error, UnicodeEncodeError):
+                        status = "NO"
+                        search_data = []
+                    if status != "OK":
                         status, search_data = connection.search(None, "FROM", sender)
                     if status != "OK":
                         raise RuntimeError("cannot search IMAP inbox")
-                    message_ids.update(search_data[0].split()[-limit:])
+                    message_ids.update(search_data[0].split())
         return sorted(message_ids, key=lambda value: int(value), reverse=True)
 
     def fetch_recent(self, limit: int) -> list[MailMessage]:
@@ -150,16 +165,26 @@ class ImapMailbox:
                     received_at = received_at.replace(tzinfo=timezone)
                 received_at = received_at.astimezone(timezone)
                 text = _message_text(parsed)
+                sender = str(parsed.get("From", ""))
+                subject = str(parsed.get("Subject", ""))
+                if not any(
+                    parser.matches(sender, subject) for parser in self.parsers
+                ):
+                    continue
                 messages.append(
                     MailMessage(
                         fingerprint=_fingerprint(parsed, received_at, text),
-                        sender=str(parsed.get("From", "")),
-                        subject=str(parsed.get("Subject", "")),
+                        sender=sender,
+                        subject=subject,
                         received_at=received_at,
                         text=" ".join(text.split()),
-                        authenticated=_has_bank_authentication_result(parsed),
+                        authenticated=_has_bank_authentication_result(
+                            parsed, self.settings.trusted_authserv_domains
+                        ),
                     )
                 )
+                if len(messages) >= limit:
+                    break
             return messages
         finally:
             try:

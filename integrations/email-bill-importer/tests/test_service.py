@@ -38,6 +38,12 @@ class FakeApiClient:
         return "new-9002"
 
 
+class FailingApiClient(FakeApiClient):
+    def add_transaction(self, transaction, marker: str, session_id: str) -> str:
+        self.added.append((transaction, marker, session_id))
+        raise RuntimeError("temporary API failure")
+
+
 class FailsOnceCreditCardParser(CmbCreditCardParser):
     def __init__(self) -> None:
         self.attempts = 0
@@ -140,6 +146,24 @@ class EmailBillServiceTestCase(unittest.TestCase):
                 self.assertEqual(first.failed, 1)
                 self.assertEqual(second.imported, 1)
                 self.assertEqual(parser.attempts, 2)
+                self.assertEqual(len(api.added), 1)
+
+    def test_api_failure_is_attempted_once_per_run(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            with Outbox(Path(directory) / "importer.db") as outbox:
+                api = FailingApiClient()
+                service = EmailBillService(
+                    mailbox=FakeMailbox([mail_message()]),
+                    outbox=outbox,
+                    api_client=api,
+                    parsers=(CmbCreditCardParser(),),
+                    max_emails=50,
+                    require_authenticated_messages=True,
+                )
+
+                summary = service.run_once()
+
+                self.assertEqual(summary.failed, 1)
                 self.assertEqual(len(api.added), 1)
 
 

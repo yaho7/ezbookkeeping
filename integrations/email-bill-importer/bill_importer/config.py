@@ -16,6 +16,16 @@ IMAP_SERVERS = {
     "hotmail.com": "outlook.office365.com",
 }
 
+AUTHENTICATION_SERVICE_DOMAINS = {
+    "qq.com": ("qq.com",),
+    "foxmail.com": ("qq.com",),
+    "163.com": ("163.com",),
+    "126.com": ("163.com",),
+    "gmail.com": ("google.com",),
+    "outlook.com": ("outlook.com",),
+    "hotmail.com": ("outlook.com",),
+}
+
 
 def _required(env: Mapping[str, str], names: tuple[str, ...]) -> dict[str, str]:
     missing = [name for name in names if not env.get(name, "").strip()]
@@ -68,6 +78,7 @@ class Settings:
     poll_interval_seconds: int
     run_once: bool
     require_authentication_results: bool
+    trusted_authserv_domains: tuple[str, ...]
 
     @classmethod
     def from_env(cls, env: Mapping[str, str] | None = None) -> "Settings":
@@ -92,6 +103,15 @@ class Settings:
             raise ValueError(
                 "IMAP_SERVER is required because the mail provider cannot be inferred"
             )
+        mail_domain = required["MAIL_USER"].rsplit("@", 1)[-1].lower()
+        configured_authserv_domains = values.get(
+            "TRUSTED_AUTHSERV_DOMAINS", ""
+        ).strip()
+        trusted_authserv_domains = tuple(
+            domain.strip().lower().strip(".")
+            for domain in configured_authserv_domains.split(",")
+            if domain.strip(" .")
+        ) or AUTHENTICATION_SERVICE_DOMAINS.get(mail_domain, (imap_server.lower(),))
 
         return cls(
             mail_user=required["MAIL_USER"],
@@ -124,6 +144,7 @@ class Settings:
             require_authentication_results=_boolean(
                 values, "REQUIRE_AUTHENTICATION_RESULTS", True
             ),
+            trusted_authserv_domains=trusted_authserv_domains,
         )
 
     def account_id_for(self, source: str) -> str:

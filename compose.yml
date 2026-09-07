@@ -35,6 +35,7 @@ services:
       POLL_INTERVAL_SECONDS: ${POLL_INTERVAL_SECONDS:-3600}
       RUN_ONCE: ${RUN_ONCE:-false}
       REQUIRE_AUTHENTICATION_RESULTS: ${REQUIRE_AUTHENTICATION_RESULTS:-true}
+      TRUSTED_AUTHSERV_DOMAINS: ${TRUSTED_AUTHSERV_DOMAINS:-}
       STATE_PATH: /data/importer.db
     volumes:
       - email-bill-importer-data:/data

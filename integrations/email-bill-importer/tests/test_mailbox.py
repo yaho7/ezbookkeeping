@@ -11,7 +11,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT_ROOT))
 
 from bill_importer.config import Settings
-from bill_importer.mailbox import ImapMailbox
+from bill_importer.mailbox import ImapMailbox, _has_bank_authentication_result
 from bill_importer.parsers import CmbCreditCardParser
 
 
@@ -76,6 +76,57 @@ class ImapMailboxTestCase(unittest.TestCase):
         self.assertIn("每日信用管家".encode("utf-8"), fake.search_calls[0])
         self.assertNotIn("ALL", flattened)
         self.assertTrue(messages[0].authenticated)
+
+    def test_rejects_untrusted_authserv_id_and_bank_domain_suffix_attack(self) -> None:
+        untrusted = EmailMessage()
+        untrusted["Authentication-Results"] = (
+            "attacker.example; dkim=pass header.d=message.cmbchina.com"
+        )
+        suffix_attack = EmailMessage()
+        suffix_attack["Authentication-Results"] = (
+            "mx.qq.com; dkim=pass header.d=message.cmbchina.com.evil; "
+            "spf=pass smtp.mailfrom=notice@message.cmbchina.com.evil"
+        )
+
+        self.assertFalse(_has_bank_authentication_result(untrusted, ("qq.com",)))
+        self.assertFalse(
+            _has_bank_authentication_result(suffix_attack, ("qq.com",))
+        )
+
+
+class FallbackImapConnection(FakeImapConnection):
+    def __init__(self, *_args, **_kwargs) -> None:
+        super().__init__()
+        unrelated = EmailMessage()
+        unrelated["From"] = "ccsvc@message.cmbchina.com"
+        unrelated["Subject"] = "招商银行其他通知"
+        unrelated["Date"] = "Mon, 07 Sep 2026 10:00:00 +0800"
+        unrelated["Message-ID"] = "<unrelated@example.com>"
+        unrelated.set_content("not a bill")
+        self.messages = {b"40": self.raw_message, b"41": unrelated.as_bytes()}
+
+    def search(self, *args):
+        self.search_calls.append(args)
+        if args[0] == "UTF-8":
+            raise UnicodeEncodeError("ascii", "主题", 0, 1, "unsupported")
+        return "OK", [b"40 41"]
+
+    def fetch(self, message_id, *_args):
+        return "OK", [(message_id + b" (RFC822)", self.messages[message_id])]
+
+
+class ImapFallbackTestCase(unittest.TestCase):
+    def test_filters_subject_before_applying_limit_in_sender_only_fallback(self) -> None:
+        fake = FallbackImapConnection()
+        with patch("bill_importer.mailbox.imaplib.IMAP4_SSL", return_value=fake):
+            mailbox = ImapMailbox(settings(), parsers=(CmbCreditCardParser(),))
+
+            messages = mailbox.fetch_recent(1)
+
+        self.assertEqual(
+            [message.subject for message in messages],
+            ["招商银行每日信用管家"],
+        )
 
 
 if __name__ == "__main__":

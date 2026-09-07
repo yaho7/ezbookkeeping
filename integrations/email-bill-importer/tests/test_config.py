@@ -30,6 +30,7 @@ class SettingsTestCase(unittest.TestCase):
         self.assertEqual(settings.ebk_server_base_url, "http://ezbookkeeping:8080")
         self.assertEqual(settings.timezone_name, "Asia/Shanghai")
         self.assertTrue(settings.require_authentication_results)
+        self.assertEqual(settings.trusted_authserv_domains, ("qq.com",))
         self.assertEqual(settings.account_id_for("cmb_credit"), "101")
         self.assertEqual(settings.category_id_for(-1), "201")
         self.assertEqual(settings.category_id_for(1), "202")
@@ -51,6 +52,19 @@ class SettingsTestCase(unittest.TestCase):
 
         with self.assertRaisesRegex(ValueError, "CMB_CREDIT_ACCOUNT_ID"):
             Settings.from_env(values)
+
+    def test_allows_explicit_trusted_authentication_service_domains(self) -> None:
+        values = dict(
+            REQUIRED_ENV,
+            TRUSTED_AUTHSERV_DOMAINS="mail.example, auth.example ",
+        )
+
+        settings = Settings.from_env(values)
+
+        self.assertEqual(
+            settings.trusted_authserv_domains,
+            ("mail.example", "auth.example"),
+        )
 
 
 if __name__ == "__main__":

@@ -35,7 +35,11 @@ class OutboxTestCase(unittest.TestCase):
                 pending = reopened.pending_transactions()
                 self.assertEqual(len(pending), 1)
                 self.assertEqual(pending[0].transaction, transaction)
-                reopened.mark_completed(pending[0].idempotency_key, "9001")
+                claimed = reopened.claim_next()
+                self.assertIsNotNone(claimed)
+                self.assertTrue(
+                    reopened.mark_completed(claimed.idempotency_key, "9001")
+                )
                 self.assertEqual(reopened.pending_transactions(), [])
                 self.assertTrue(reopened.has_message("message-key"))
 
@@ -78,6 +82,44 @@ class OutboxTestCase(unittest.TestCase):
 
                 self.assertIsNotNone(first_claim)
                 self.assertIsNone(second_claim)
+
+    def test_expired_worker_cannot_overwrite_new_lease_and_failure_backs_off(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "importer.db"
+            transaction = BankTransaction(
+                source="cmb_credit",
+                occurred_at=datetime(
+                    2026, 9, 7, 9, 0, tzinfo=ZoneInfo("Asia/Shanghai")
+                ),
+                amount_minor=-100,
+                merchant="商户",
+                description="消费",
+            )
+            with Outbox(path, worker_id="worker-one") as first, Outbox(
+                path, worker_id="worker-two"
+            ) as second:
+                first.record_message("message", "通知", [transaction])
+                first_claim = first.claim_next(now=1000, lease_seconds=10)
+                second_claim = second.claim_next(now=1011, lease_seconds=10)
+
+                self.assertIsNotNone(first_claim)
+                self.assertIsNotNone(second_claim)
+                self.assertFalse(
+                    first.mark_completed(first_claim.idempotency_key, "late-remote-id")
+                )
+                self.assertFalse(
+                    first.mark_failed(first_claim.idempotency_key, "late", now=1011)
+                )
+                self.assertTrue(
+                    second.mark_failed(
+                        second_claim.idempotency_key,
+                        "temporary",
+                        now=1011,
+                        retry_delay_seconds=60,
+                    )
+                )
+                self.assertIsNone(second.claim_next(now=1070))
+                self.assertIsNotNone(second.claim_next(now=1071))
 
 
 if __name__ == "__main__":
