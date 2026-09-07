@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -29,8 +30,10 @@ func (s *fakeEmailBillUserService) GetUserByUsername(core.Context, string) (*mod
 }
 
 type fakeEmailBillTransactionService struct {
-	created []*models.Transaction
-	markers map[string]bool
+	created         []*models.Transaction
+	markers         map[string]bool
+	createErr       error
+	markBeforeError bool
 }
 
 func (s *fakeEmailBillTransactionService) HasEmailBillMarker(_ core.Context, _ int64, marker string) (bool, error) {
@@ -38,9 +41,48 @@ func (s *fakeEmailBillTransactionService) HasEmailBillMarker(_ core.Context, _ i
 }
 
 func (s *fakeEmailBillTransactionService) CreateTransaction(_ core.Context, transaction *models.Transaction, _ []int64, _ []int64) error {
+	if s.createErr != nil {
+		if s.markBeforeError {
+			s.markers[emailBillMarker(transaction.Comment)] = true
+		}
+		return s.createErr
+	}
 	s.created = append(s.created, transaction)
 	s.markers[emailBillMarker(transaction.Comment)] = true
 	return nil
+}
+
+func TestEmailBillImporterTreatsConcurrentDuplicateAsImported(t *testing.T) {
+	config := &settings.Config{EmailBillConfig: &settings.EmailBillConfig{
+		Enabled:            true,
+		TargetUser:         "alice",
+		CMBCreditAccountID: 101,
+		CMBDebitAccountID:  102,
+		ExpenseCategoryID:  201,
+		IncomeCategoryID:   202,
+		Timezone:           "Asia/Shanghai",
+	}}
+	transactions := &fakeEmailBillTransactionService{
+		markers:         make(map[string]bool),
+		createErr:       errors.New("duplicate transaction time"),
+		markBeforeError: true,
+	}
+	mailbox := &fakeEmailBillMailbox{messages: []emailbill.Message{{
+		Fingerprint:   "<bill-race@example.com>",
+		Sender:        "ccsvc@message.cmbchina.com",
+		Subject:       "每日信用管家",
+		Text:          "2026/09/07 08:30:00 CNY 12.34 尾号1234消费 早餐店(每日邮件)",
+		ReceivedAt:    time.Date(2026, 9, 7, 9, 0, 0, 0, time.FixedZone("CST", 8*60*60)),
+		Authenticated: true,
+	}}}
+	service := NewEmailBillImportService(
+		&fakeEmailBillConfigProvider{config: config},
+		&fakeEmailBillUserService{user: &models.User{Uid: 7}},
+		transactions,
+		func(*settings.EmailBillConfig, []emailbill.Parser) emailbill.Mailbox { return mailbox },
+	)
+
+	require.NoError(t, service.Import(core.NewNullContext()))
 }
 
 type fakeEmailBillMailbox struct {

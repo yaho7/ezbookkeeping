@@ -39,6 +39,21 @@ func TestCMBCreditParserParsesExpenseAndRefund(t *testing.T) {
 	assert.Equal(t, int64(327), transactions[1].AmountMinor)
 }
 
+func TestCMBCreditParserUsesNextTimestampAndEndOfTextAsBoundaries(t *testing.T) {
+	parser := NewCMBCreditParser()
+	receivedAt := time.Date(2026, 9, 7, 12, 0, 0, 0, time.FixedZone("CST", 8*60*60))
+	body := "2026/09/07\n08:30:00 CNY 12.34 尾号1234消费 早餐店\n09:45:10 CNY -5.67 尾号1234退货 商场"
+
+	transactions, err := parser.Parse(body, receivedAt)
+
+	require.NoError(t, err)
+	require.Len(t, transactions, 2)
+	assert.Equal(t, "早餐店", transactions[0].Merchant)
+	assert.Equal(t, int64(-1234), transactions[0].AmountMinor)
+	assert.Equal(t, "商场", transactions[1].Merchant)
+	assert.Equal(t, int64(567), transactions[1].AmountMinor)
+}
+
 func TestCMBDebitParserParsesExpenseIncomeAndFundsAggregation(t *testing.T) {
 	parser := NewCMBDebitParser()
 	receivedAt := time.Date(2026, 9, 7, 20, 0, 0, 0, testLocation(t))
@@ -57,6 +72,18 @@ func TestCMBDebitParserParsesExpenseIncomeAndFundsAggregation(t *testing.T) {
 	assert.Equal(t, int64(50000), transactions[2].AmountMinor)
 	assert.Contains(t, transactions[2].Merchant, "资金归集")
 	assert.Equal(t, 18, transactions[2].OccurredAt.Hour())
+}
+
+func TestCMBDebitParserParsesMultilineIncomePrefix(t *testing.T) {
+	parser := NewCMBDebitParser()
+	receivedAt := time.Date(2026, 9, 7, 20, 0, 0, 0, time.FixedZone("CST", 8*60*60))
+
+	transactions, err := parser.Parse("您的账户于09月07日09:45\n工资入账100.00元。", receivedAt)
+
+	require.NoError(t, err)
+	require.Len(t, transactions, 1)
+	assert.Equal(t, int64(10000), transactions[0].AmountMinor)
+	assert.Equal(t, "工资", transactions[0].Merchant)
 }
 
 func TestCMBDebitParserUsesPreviousYearForDecemberMailReceivedInJanuary(t *testing.T) {

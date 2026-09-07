@@ -11,7 +11,7 @@ import (
 
 var (
 	creditDatePattern        = regexp.MustCompile(`\d{4}/\d{2}/\d{2}`)
-	creditTransactionPattern = regexp.MustCompile(`(?s)(\d{2}:\d{2}:\d{2})\s+CNY\s+(-?\d+(?:\.\d+)?)\s+(.+?)(?:\(每日邮件\)|\(Daily Email\))`)
+	creditTransactionPattern = regexp.MustCompile(`(?m)(\d{2}:\d{2}:\d{2})\s+CNY\s+(-?\d+(?:\.\d+)?)\s+`)
 	creditCardPrefixPattern  = regexp.MustCompile(`尾号\d+\s*(?:消费|退货|预授权完成)\s*`)
 	shortDatePattern         = regexp.MustCompile(`^(\d{2})月(\d{2})日$`)
 	moneyPattern             = regexp.MustCompile(`^(-?)(\d+)(?:\.(\d+))?$`)
@@ -42,21 +42,33 @@ func (p *cmbCreditParser) Parse(text string, receivedAt time.Time) ([]ParsedTran
 		dateText = match
 	}
 
-	matches := creditTransactionPattern.FindAllStringSubmatch(text, -1)
+	matches := creditTransactionPattern.FindAllStringSubmatchIndex(text, -1)
 	transactions := make([]ParsedTransaction, 0, len(matches))
 
-	for _, match := range matches {
-		amountMinor, err := moneyToMinor(match[2])
+	for index, match := range matches {
+		descriptionEnd := len(text)
+		if index+1 < len(matches) {
+			descriptionEnd = matches[index+1][0]
+		}
+		description := text[match[1]:descriptionEnd]
+		for _, footer := range []string{"(每日邮件)", "(Daily Email)"} {
+			if footerIndex := strings.Index(description, footer); footerIndex >= 0 {
+				description = description[:footerIndex]
+			}
+		}
+		description = strings.Join(strings.Fields(description), " ")
+
+		amountMinor, err := moneyToMinor(text[match[4]:match[5]])
 		if err != nil {
 			return nil, err
 		}
 
-		merchant := strings.TrimSpace(creditCardPrefixPattern.ReplaceAllString(strings.Join(strings.Fields(match[3]), " "), ""))
+		merchant := strings.TrimSpace(creditCardPrefixPattern.ReplaceAllString(description, ""))
 		if merchant == "" || amountMinor == 0 {
 			continue
 		}
 
-		occurredAt, err := transactionDateTime(dateText, match[1], receivedAt)
+		occurredAt, err := transactionDateTime(dateText, text[match[2]:match[3]], receivedAt)
 		if err != nil {
 			return nil, err
 		}
@@ -66,7 +78,7 @@ func (p *cmbCreditParser) Parse(text string, receivedAt time.Time) ([]ParsedTran
 			OccurredAt:  occurredAt,
 			AmountMinor: -amountMinor,
 			Merchant:    merchant,
-			Description: strings.Join(strings.Fields(match[3]), " "),
+			Description: description,
 		})
 	}
 
@@ -147,7 +159,7 @@ func (p *cmbDebitParser) Parse(text string, receivedAt time.Time) ([]ParsedTrans
 				return text[groupStart:groupEnd]
 			}
 
-			merchant := strings.Trim(group(rule.merchantGroup), " ，,")
+			merchant := strings.Trim(strings.TrimSpace(group(rule.merchantGroup)), "，,")
 			if merchant == "" {
 				merchant = "招商银行"
 			} else if rule.merchantPrefix {

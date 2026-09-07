@@ -68,6 +68,31 @@ cron_expression = every morning
 	require.ErrorContains(t, err, "cron_expression")
 }
 
+func TestLoadEmailBillConfigurationRejectsCronTimezonePrefix(t *testing.T) {
+	configFile, err := ini.Load([]byte(`[email_bill]
+enabled = true
+target_user = alice
+mail_user = alice@qq.com
+mail_password = app-password
+cmb_credit_account_id = 101
+cmb_debit_account_id = 102
+expense_category_id = 201
+income_category_id = 202
+cron_expression = CRON_TZ=UTC 0 3 * * *
+`))
+	require.NoError(t, err)
+
+	err = loadEmailBillConfiguration(&Config{}, configFile, "email_bill")
+
+	require.ErrorContains(t, err, "five fields")
+}
+
+func TestDefaultAuthenticationServiceDomains(t *testing.T) {
+	assert.Equal(t, []string{"google.com"}, defaultAuthenticationServiceDomains("gmail.com", "imap.gmail.com"))
+	assert.Equal(t, []string{"outlook.com"}, defaultAuthenticationServiceDomains("hotmail.com", "outlook.office365.com"))
+	assert.Equal(t, []string{"imap.example.com"}, defaultAuthenticationServiceDomains("example.com", "imap.example.com"))
+}
+
 func TestLoadEmailBillConfigurationRejectsMissingRequiredValue(t *testing.T) {
 	configFile, err := ini.Load([]byte(`[email_bill]
 enabled = true

@@ -103,6 +103,13 @@ func (s *EmailBillImportService) Import(c core.Context) error {
 
 				transaction := buildEmailBillTransaction(c, user.Uid, emailConfig, item, marker)
 				if createErr := s.transactions.CreateTransaction(c, transaction, nil, nil); createErr != nil {
+					exists, recheckErr := s.transactions.HasEmailBillMarker(c, user.Uid, marker)
+					if recheckErr == nil && exists {
+						continue
+					}
+					if recheckErr != nil {
+						return fmt.Errorf("create email bill transaction: %v; recheck marker: %w", createErr, recheckErr)
+					}
 					return fmt.Errorf("create email bill transaction: %w", createErr)
 				}
 				log.Infof(c, "[email_bill_importer.Import] created transaction %d from %s email", transaction.TransactionId, item.Source)

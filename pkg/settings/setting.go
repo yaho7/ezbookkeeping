@@ -1118,6 +1118,9 @@ func loadEmailBillConfiguration(config *Config, configFile *ini.File, sectionNam
 	if emailBillConfig.MaxEmails < 1 {
 		return fmt.Errorf("email bill configuration max_emails must be at least 1")
 	}
+	if len(strings.Fields(emailBillConfig.CronExpression)) != 5 {
+		return fmt.Errorf("email bill configuration cron_expression must contain five fields")
+	}
 	if _, err = robfigcron.ParseStandard(emailBillConfig.CronExpression); err != nil {
 		return fmt.Errorf("invalid email bill cron_expression %q: %w", emailBillConfig.CronExpression, err)
 	}
@@ -1125,7 +1128,7 @@ func loadEmailBillConfiguration(config *Config, configFile *ini.File, sectionNam
 		return fmt.Errorf("invalid email bill timezone %q: %w", emailBillConfig.Timezone, err)
 	}
 
-	trustedDomains := getConfigItemStringValue(configFile, sectionName, "trusted_authserv_domains", mailDomain)
+	trustedDomains := getConfigItemStringValue(configFile, sectionName, "trusted_authserv_domains", strings.Join(defaultAuthenticationServiceDomains(mailDomain, emailBillConfig.IMAPServer), ","))
 	for _, domain := range strings.Split(trustedDomains, ",") {
 		domain = strings.ToLower(strings.TrimSpace(domain))
 		if domain != "" {
@@ -1137,6 +1140,27 @@ func loadEmailBillConfiguration(config *Config, configFile *ini.File, sectionNam
 	}
 
 	return nil
+}
+
+func defaultAuthenticationServiceDomains(mailDomain string, imapServer string) []string {
+	domains := map[string][]string{
+		"qq.com":      {"qq.com"},
+		"foxmail.com": {"qq.com"},
+		"163.com":     {"163.com"},
+		"126.com":     {"163.com"},
+		"yeah.net":    {"163.com"},
+		"gmail.com":   {"google.com"},
+		"outlook.com": {"outlook.com"},
+		"hotmail.com": {"outlook.com"},
+	}
+	if configured := domains[mailDomain]; len(configured) > 0 {
+		return configured
+	}
+	fallback := strings.TrimSuffix(strings.ToLower(strings.TrimSpace(imapServer)), ".")
+	if fallback == "" {
+		return nil
+	}
+	return []string{fallback}
 }
 
 func getRequiredConfigItemInt64Value(configFile *ini.File, sectionName string, itemName string) (int64, error) {
