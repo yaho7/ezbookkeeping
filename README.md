@@ -74,6 +74,14 @@ Visit [Docker Hub](https://hub.docker.com/r/mayswind/ezbookkeeping) to see all i
 
     $ docker run -p8080:8080 mayswind/ezbookkeeping:latest-snapshot
 
+### Docker Compose with Email Bill Import
+
+This fork can run ezBookkeeping together with a CMB email bill importer. The importer reads supported CMB credit-card and debit-card notification emails, keeps durable synchronization state, and creates transactions through the ezBookkeeping API.
+
+See [Email Bill Importer](docs/email-bill-importer.md) for the first-run setup. After creating `.env`, the complete stack starts with:
+
+    $ docker compose up -d
+
 ### Install from Binary
 Download the latest release: [https://github.com/mayswind/ezbookkeeping/releases](https://github.com/mayswind/ezbookkeeping/releases)
 

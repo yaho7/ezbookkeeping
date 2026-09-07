@@ -1,0 +1,47 @@
+services:
+  ezbookkeeping:
+    image: ${EBK_IMAGE:-ghcr.io/yaho7/ezbookkeeping:latest}
+    restart: unless-stopped
+    ports:
+      - "${EBK_PORT:-8080}:8080"
+    environment:
+      EBK_SECURITY_ENABLE_API_TOKEN: "true"
+      EBK_SECURITY_SECRET_KEY: ${EBK_SECURITY_SECRET_KEY}
+    volumes:
+      - ezbookkeeping-data:/ezbookkeeping/data
+      - ezbookkeeping-storage:/ezbookkeeping/storage
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/healthz.json"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  email-bill-importer:
+    image: ${BILL_IMPORTER_IMAGE:-ghcr.io/yaho7/ezbookkeeping-email-bill-importer:latest}
+    restart: unless-stopped
+    environment:
+      EBK_SERVER_BASE_URL: http://ezbookkeeping:8080
+      EBK_API_TOKEN: ${EBK_API_TOKEN}
+      MAIL_USER: ${MAIL_USER}
+      MAIL_PASS: ${MAIL_PASS}
+      IMAP_SERVER: ${IMAP_SERVER:-}
+      IMAP_PORT: ${IMAP_PORT:-993}
+      CMB_CREDIT_ACCOUNT_ID: ${CMB_CREDIT_ACCOUNT_ID}
+      CMB_DEBIT_ACCOUNT_ID: ${CMB_DEBIT_ACCOUNT_ID}
+      EXPENSE_CATEGORY_ID: ${EXPENSE_CATEGORY_ID}
+      INCOME_CATEGORY_ID: ${INCOME_CATEGORY_ID}
+      TZ: ${TZ:-Asia/Shanghai}
+      MAX_EMAILS: ${MAX_EMAILS:-60}
+      POLL_INTERVAL_SECONDS: ${POLL_INTERVAL_SECONDS:-3600}
+      RUN_ONCE: ${RUN_ONCE:-false}
+      STATE_PATH: /data/importer.db
+    volumes:
+      - email-bill-importer-data:/data
+    depends_on:
+      ezbookkeeping:
+        condition: service_healthy
+
+volumes:
+  ezbookkeeping-data:
+  ezbookkeeping-storage:
+  email-bill-importer-data:
