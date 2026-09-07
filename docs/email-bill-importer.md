@@ -69,7 +69,7 @@ docker compose logs -f email-bill-importer
 docker compose restart email-bill-importer
 ```
 
-默认每小时按受支持的发件人和主题组合检查最近 60 封匹配邮件。可通过 `.env` 的 `POLL_INTERVAL_SECONDS` 与 `MAX_EMAILS` 调整。首次导入前如果邮箱历史邮件很多，应适当提高 `MAX_EMAILS`。
+默认每小时为信用卡和储蓄卡解析器分别检查最近 60 封匹配邮件，避免一类高频通知挤掉另一类账单。可通过 `.env` 的 `POLL_INTERVAL_SECONDS` 与 `MAX_EMAILS` 调整。首次导入前如果邮箱历史邮件很多，应适当提高 `MAX_EMAILS`。
 
 默认的 `REQUIRE_AUTHENTICATION_RESULTS=true` 会读取邮箱服务商添加在最前面的认证结果，同时校验认证服务域名和招行域名的完整边界，降低伪造 `From` 地址造成错误入账的风险。QQ、163、Gmail 和 Outlook 等已知邮箱会自动推断认证服务域名；自建邮箱应通过逗号分隔的 `TRUSTED_AUTHSERV_DOMAINS` 明确配置。若服务商没有提供该邮件头，日志会显示邮件因未通过认证而被拒绝；确认邮箱链路可信后，才可把该值改为 `false`。导入器自身不执行完整 DKIM 密码学验证。
 

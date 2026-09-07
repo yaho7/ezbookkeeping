@@ -150,6 +150,7 @@ class ImapMailbox:
                 raise RuntimeError("cannot select IMAP inbox")
             message_ids = self._search_message_ids(connection, limit)
             messages: list[MailMessage] = []
+            parser_counts = [0] * len(self.parsers)
             for message_id in message_ids:
                 status, fetched = connection.fetch(message_id, "(RFC822)")
                 if status != "OK" or not fetched or not isinstance(fetched[0], tuple):
@@ -167,9 +168,15 @@ class ImapMailbox:
                 text = _message_text(parsed)
                 sender = str(parsed.get("From", ""))
                 subject = str(parsed.get("Subject", ""))
-                if not any(
-                    parser.matches(sender, subject) for parser in self.parsers
-                ):
+                parser_index = next(
+                    (
+                        index
+                        for index, parser in enumerate(self.parsers)
+                        if parser.matches(sender, subject)
+                    ),
+                    None,
+                )
+                if parser_index is None or parser_counts[parser_index] >= limit:
                     continue
                 messages.append(
                     MailMessage(
@@ -183,7 +190,8 @@ class ImapMailbox:
                         ),
                     )
                 )
-                if len(messages) >= limit:
+                parser_counts[parser_index] += 1
+                if all(count >= limit for count in parser_counts):
                     break
             return messages
         finally:

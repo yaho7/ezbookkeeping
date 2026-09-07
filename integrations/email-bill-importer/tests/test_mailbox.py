@@ -12,7 +12,7 @@ sys.path.insert(0, str(PROJECT_ROOT))
 
 from bill_importer.config import Settings
 from bill_importer.mailbox import ImapMailbox, _has_bank_authentication_result
-from bill_importer.parsers import CmbCreditCardParser
+from bill_importer.parsers import CmbCreditCardParser, CmbDebitCardParser
 
 
 def settings() -> Settings:
@@ -126,6 +126,42 @@ class ImapFallbackTestCase(unittest.TestCase):
         self.assertEqual(
             [message.subject for message in messages],
             ["招商银行每日信用管家"],
+        )
+
+
+class MixedBillImapConnection(FakeImapConnection):
+    def __init__(self, *_args, **_kwargs) -> None:
+        super().__init__()
+        debit = EmailMessage()
+        debit["From"] = "95555@message.cmbchina.com"
+        debit["Subject"] = "招商银行动账通知"
+        debit["Date"] = "Mon, 07 Sep 2026 10:00:00 +0800"
+        debit["Message-ID"] = "<debit@example.com>"
+        debit["Authentication-Results"] = (
+            "mx.qq.com; dkim=pass header.d=message.cmbchina.com"
+        )
+        debit.set_content("于09月07日10:00在商户消费人民币2.00元")
+        self.messages = {b"40": self.raw_message, b"41": debit.as_bytes()}
+
+    def search(self, *_args):
+        return "OK", [b"40 41"]
+
+    def fetch(self, message_id, *_args):
+        return "OK", [(message_id + b" (RFC822)", self.messages[message_id])]
+
+
+class ImapParserQuotaTestCase(unittest.TestCase):
+    def test_applies_message_limit_independently_to_each_parser(self) -> None:
+        fake = MixedBillImapConnection()
+        parsers = (CmbCreditCardParser(), CmbDebitCardParser())
+        with patch("bill_importer.mailbox.imaplib.IMAP4_SSL", return_value=fake):
+            mailbox = ImapMailbox(settings(), parsers=parsers)
+
+            messages = mailbox.fetch_recent(1)
+
+        self.assertEqual(
+            {message.subject for message in messages},
+            {"招商银行每日信用管家", "招商银行动账通知"},
         )
 
 
