@@ -13,6 +13,7 @@ import (
 	"github.com/mayswind/ezbookkeeping/pkg/emailbill"
 	"github.com/mayswind/ezbookkeeping/pkg/models"
 	"github.com/mayswind/ezbookkeeping/pkg/settings"
+	"github.com/mayswind/ezbookkeeping/pkg/utils"
 )
 
 type fakeEmailBillConfigProvider struct {
@@ -32,6 +33,7 @@ func (s *fakeEmailBillUserService) GetUserByUsername(core.Context, string) (*mod
 type fakeEmailBillTransactionService struct {
 	created         []*models.Transaction
 	markers         map[string]bool
+	occupiedTimes   map[int64]bool
 	createErr       error
 	markBeforeError bool
 }
@@ -40,7 +42,11 @@ func (s *fakeEmailBillTransactionService) HasEmailBillMarker(_ core.Context, _ i
 	return s.markers[marker], nil
 }
 
-func (s *fakeEmailBillTransactionService) CreateTransaction(_ core.Context, transaction *models.Transaction, _ []int64, _ []int64) error {
+func (s *fakeEmailBillTransactionService) HasTransactionAtTime(_ core.Context, _ int64, transactionTime int64) (bool, error) {
+	return s.occupiedTimes[transactionTime], nil
+}
+
+func (s *fakeEmailBillTransactionService) CreateEmailBillTransaction(_ core.Context, transaction *models.Transaction) error {
 	if s.createErr != nil {
 		if s.markBeforeError {
 			s.markers[emailBillMarker(transaction.Comment)] = true
@@ -49,6 +55,7 @@ func (s *fakeEmailBillTransactionService) CreateTransaction(_ core.Context, tran
 	}
 	s.created = append(s.created, transaction)
 	s.markers[emailBillMarker(transaction.Comment)] = true
+	s.occupiedTimes[transaction.TransactionTime] = true
 	return nil
 }
 
@@ -64,6 +71,7 @@ func TestEmailBillImporterTreatsConcurrentDuplicateAsImported(t *testing.T) {
 	}}
 	transactions := &fakeEmailBillTransactionService{
 		markers:         make(map[string]bool),
+		occupiedTimes:   make(map[int64]bool),
 		createErr:       errors.New("duplicate transaction time"),
 		markBeforeError: true,
 	}
@@ -85,6 +93,22 @@ func TestEmailBillImporterTreatsConcurrentDuplicateAsImported(t *testing.T) {
 	require.NoError(t, service.Import(core.NewNullContext()))
 }
 
+func TestEmailBillImporterUsesNextDeterministicTimeWhenOccupied(t *testing.T) {
+	marker := "[ebk-mail:0123456789abcdef0123]"
+	baseTime := utils.GetMinTransactionTimeFromUnixTime(time.Date(2026, 9, 7, 8, 30, 0, 0, time.UTC).Unix())
+	firstTime := baseTime + emailBillTransactionTimeOffset(marker)
+	transactions := &fakeEmailBillTransactionService{
+		markers:       make(map[string]bool),
+		occupiedTimes: map[int64]bool{firstTime: true},
+	}
+	service := &EmailBillImportService{transactions: transactions}
+	transaction := &models.Transaction{Uid: 7, TransactionTime: baseTime, Comment: marker}
+
+	require.NoError(t, service.createTransaction(core.NewNullContext(), transaction, marker))
+	require.Len(t, transactions.created, 1)
+	assert.Equal(t, baseTime+(emailBillTransactionTimeOffset(marker)+1)%999, transactions.created[0].TransactionTime)
+}
+
 type fakeEmailBillMailbox struct {
 	messages []emailbill.Message
 }
@@ -103,7 +127,7 @@ func TestEmailBillImporterCreatesNativeTransactionOnlyOnce(t *testing.T) {
 		IncomeCategoryID:   202,
 		Timezone:           "Asia/Shanghai",
 	}}
-	transactions := &fakeEmailBillTransactionService{markers: make(map[string]bool)}
+	transactions := &fakeEmailBillTransactionService{markers: make(map[string]bool), occupiedTimes: make(map[int64]bool)}
 	mailbox := &fakeEmailBillMailbox{messages: []emailbill.Message{{
 		Fingerprint:   "<bill-1@example.com>",
 		Sender:        "ccsvc@message.cmbchina.com",

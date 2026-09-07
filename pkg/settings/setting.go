@@ -209,9 +209,10 @@ const (
 
 	defaultImportFileMaxSize uint32 = 10485760 // 10MB
 
-	defaultEmailBillIMAPPort       uint16 = 993
-	defaultEmailBillCronExpression        = "0 3 * * *"
-	defaultEmailBillMaxEmails      uint32 = 60
+	defaultEmailBillIMAPPort        uint16 = 993
+	defaultEmailBillCronExpression         = "0 3 * * *"
+	defaultEmailBillMaxEmails       uint32 = 60
+	defaultEmailBillMaxMessageBytes uint32 = 2 * 1024 * 1024
 
 	defaultExchangeRatesDataRequestTimeout uint32 = 10000 // 10 seconds
 )
@@ -257,6 +258,7 @@ type EmailBillConfig struct {
 	Timezone                     string
 	CronExpression               string
 	MaxEmails                    uint32
+	MaxMessageBytes              uint32
 	RequireAuthenticationResults bool
 	TrustedAuthservDomains       []string
 }
@@ -1067,6 +1069,7 @@ func loadEmailBillConfiguration(config *Config, configFile *ini.File, sectionNam
 		Timezone:                     getConfigItemStringValue(configFile, sectionName, "timezone", "Asia/Shanghai"),
 		CronExpression:               strings.TrimSpace(getConfigItemStringValue(configFile, sectionName, "cron_expression", defaultEmailBillCronExpression)),
 		MaxEmails:                    getConfigItemUint32Value(configFile, sectionName, "max_emails", defaultEmailBillMaxEmails),
+		MaxMessageBytes:              getConfigItemUint32Value(configFile, sectionName, "max_message_bytes", defaultEmailBillMaxMessageBytes),
 		RequireAuthenticationResults: getConfigItemBoolValue(configFile, sectionName, "require_authentication_results", true),
 	}
 	config.EmailBillConfig = emailBillConfig
@@ -1117,6 +1120,9 @@ func loadEmailBillConfiguration(config *Config, configFile *ini.File, sectionNam
 
 	if emailBillConfig.MaxEmails < 1 {
 		return fmt.Errorf("email bill configuration max_emails must be at least 1")
+	}
+	if emailBillConfig.MaxMessageBytes < 1024 {
+		return fmt.Errorf("email bill configuration max_message_bytes must be at least 1024")
 	}
 	if len(strings.Fields(emailBillConfig.CronExpression)) != 5 {
 		return fmt.Errorf("email bill configuration cron_expression must contain five fields")

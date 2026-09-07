@@ -59,3 +59,31 @@ func TestDecodeMessageRejectsUntrustedAuthenticationResults(t *testing.T) {
 	require.NoError(t, err)
 	assert.False(t, message.Authenticated)
 }
+
+func TestDecodeMessageAcceptsDKIMIdentityDomain(t *testing.T) {
+	raw := strings.Join([]string{
+		"From: 95555@message.cmbchina.com",
+		"Subject: 招商银行通知",
+		"Authentication-Results: mx.qq.com; dkim=pass header.i=@message.cmbchina.com",
+		"Content-Type: text/plain; charset=utf-8",
+		"",
+		"test",
+		"",
+	}, "\r\n")
+
+	message, err := DecodeMessage(strings.NewReader(raw), MessageSecurity{
+		RequireAuthenticationResults: true,
+		TrustedAuthservDomains:       []string{"qq.com"},
+	}, time.Now())
+
+	require.NoError(t, err)
+	assert.True(t, message.Authenticated)
+}
+
+func TestDecodeMessageRejectsOversizedBody(t *testing.T) {
+	raw := "From: 95555@message.cmbchina.com\r\nSubject: 招商银行通知\r\nContent-Type: text/plain\r\n\r\n" + strings.Repeat("x", 128)
+
+	_, err := DecodeMessageWithLimit(strings.NewReader(raw), MessageSecurity{}, time.Now(), 64)
+
+	require.ErrorContains(t, err, "size limit")
+}

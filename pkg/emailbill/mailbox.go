@@ -23,12 +23,13 @@ type Mailbox interface {
 
 // MailboxConfig contains the connection and security settings used by IMAPMailbox.
 type MailboxConfig struct {
-	Server    string
-	Port      uint16
-	Username  string
-	Password  string
-	MaxEmails uint32
-	Security  MessageSecurity
+	Server          string
+	Port            uint16
+	Username        string
+	Password        string
+	MaxEmails       uint32
+	MaxMessageBytes uint32
+	Security        MessageSecurity
 }
 
 // IMAPMailbox fetches supported CMB emails over IMAPS without changing message flags.
@@ -75,15 +76,81 @@ func (m *IMAPMailbox) FetchRecent(ctx context.Context) ([]Message, error) {
 		return nil, nil
 	}
 
-	sequenceSet := new(imap.SeqSet)
-	sequenceSet.AddNum(uids...)
-	section := &imap.BodySectionName{Peek: true}
+	messageDates, err := m.fetchAuthenticatedHeaders(ctx, imapClient, uids)
+	if err != nil {
+		return nil, err
+	}
+	if len(messageDates) == 0 {
+		return nil, nil
+	}
+
+	authenticatedUIDs := make([]uint32, 0, len(messageDates))
+	for uid := range messageDates {
+		authenticatedUIDs = append(authenticatedUIDs, uid)
+	}
+	sort.Slice(authenticatedUIDs, func(i, j int) bool { return authenticatedUIDs[i] < authenticatedUIDs[j] })
+	return m.fetchAuthenticatedBodies(ctx, imapClient, authenticatedUIDs, messageDates)
+}
+
+func (m *IMAPMailbox) fetchAuthenticatedHeaders(ctx context.Context, imapClient *client.Client, uids []uint32) (map[uint32]time.Time, error) {
+	sequenceSet := sequenceSetForUIDs(uids)
+	headerSection := &imap.BodySectionName{
+		BodyPartName: imap.BodyPartName{Specifier: imap.HeaderSpecifier},
+		Peek:         true,
+	}
 	fetched := make(chan *imap.Message)
 	fetchErr := make(chan error, 1)
 	go func() {
 		fetchErr <- imapClient.UidFetch(sequenceSet, []imap.FetchItem{
 			imap.FetchUid,
 			imap.FetchInternalDate,
+			imap.FetchRFC822Size,
+			headerSection.FetchItem(),
+		}, fetched)
+	}()
+
+	messageDates := make(map[uint32]time.Time, len(uids))
+	for {
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case fetchedMessage, ok := <-fetched:
+			if !ok {
+				if err := <-fetchErr; err != nil {
+					return nil, fmt.Errorf("fetch IMAP message headers: %w", err)
+				}
+				return messageDates, nil
+			}
+			if fetchedMessage == nil {
+				continue
+			}
+			if fetchedMessage.Size > m.maxMessageBytes() {
+				continue
+			}
+			header := fetchedMessage.GetBody(headerSection)
+			if header == nil {
+				continue
+			}
+			decoded, decodeErr := DecodeMessageWithLimit(header, m.config.Security, fetchedMessage.InternalDate, m.maxMessageBytes())
+			if decodeErr != nil || !decoded.Authenticated || !m.supported(decoded) {
+				continue
+			}
+			messageDates[fetchedMessage.Uid] = fetchedMessage.InternalDate
+		}
+	}
+}
+
+func (m *IMAPMailbox) fetchAuthenticatedBodies(ctx context.Context, imapClient *client.Client, uids []uint32, messageDates map[uint32]time.Time) ([]Message, error) {
+	sequenceSet := sequenceSetForUIDs(uids)
+	section := &imap.BodySectionName{
+		Peek:    true,
+		Partial: []int{0, int(m.maxMessageBytes()) + 1},
+	}
+	fetched := make(chan *imap.Message)
+	fetchErr := make(chan error, 1)
+	go func() {
+		fetchErr <- imapClient.UidFetch(sequenceSet, []imap.FetchItem{
+			imap.FetchUid,
 			section.FetchItem(),
 		}, fetched)
 	}()
@@ -95,8 +162,8 @@ func (m *IMAPMailbox) FetchRecent(ctx context.Context) ([]Message, error) {
 			return nil, ctx.Err()
 		case fetchedMessage, ok := <-fetched:
 			if !ok {
-				if err = <-fetchErr; err != nil {
-					return nil, fmt.Errorf("fetch IMAP messages: %w", err)
+				if err := <-fetchErr; err != nil {
+					return nil, fmt.Errorf("fetch IMAP message bodies: %w", err)
 				}
 				return messages, nil
 			}
@@ -107,13 +174,26 @@ func (m *IMAPMailbox) FetchRecent(ctx context.Context) ([]Message, error) {
 			if body == nil {
 				continue
 			}
-			decoded, decodeErr := DecodeMessage(body, m.config.Security, fetchedMessage.InternalDate)
-			if decodeErr != nil || !m.supported(decoded) {
+			decoded, decodeErr := DecodeMessageWithLimit(body, m.config.Security, messageDates[fetchedMessage.Uid], m.maxMessageBytes())
+			if decodeErr != nil || !decoded.Authenticated || !m.supported(decoded) {
 				continue
 			}
 			messages = append(messages, decoded)
 		}
 	}
+}
+
+func (m *IMAPMailbox) maxMessageBytes() uint32 {
+	if m.config.MaxMessageBytes == 0 {
+		return DefaultMaxMessageBytes
+	}
+	return m.config.MaxMessageBytes
+}
+
+func sequenceSetForUIDs(uids []uint32) *imap.SeqSet {
+	sequenceSet := new(imap.SeqSet)
+	sequenceSet.AddNum(uids...)
+	return sequenceSet
 }
 
 func (m *IMAPMailbox) searchSupportedUIDs(imapClient *client.Client) ([]uint32, error) {

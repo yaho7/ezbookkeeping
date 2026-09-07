@@ -1,6 +1,7 @@
 package emailbill
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"encoding/base64"
 	"fmt"
@@ -18,9 +19,12 @@ import (
 )
 
 var (
-	dkimDomainPattern = regexp.MustCompile(`header\.d\s*=\s*([^\s;]+)`)
+	dkimDomainPattern = regexp.MustCompile(`header\.(?:d|i)\s*=\s*([^\s;]+)`)
 	spfSenderPattern  = regexp.MustCompile(`smtp\.(?:mailfrom|helo)\s*=\s*([^\s;]+)`)
 )
+
+// DefaultMaxMessageBytes is the maximum RFC 5322 message size decoded by default.
+const DefaultMaxMessageBytes uint32 = 2 * 1024 * 1024
 
 // MessageSecurity controls validation of received Authentication-Results headers.
 type MessageSecurity struct {
@@ -30,6 +34,23 @@ type MessageSecurity struct {
 
 // DecodeMessage decodes one RFC 5322 message into parser input.
 func DecodeMessage(reader io.Reader, security MessageSecurity, fallbackTime time.Time) (Message, error) {
+	return DecodeMessageWithLimit(reader, security, fallbackTime, DefaultMaxMessageBytes)
+}
+
+// DecodeMessageWithLimit decodes one RFC 5322 message without reading beyond maxBytes.
+func DecodeMessageWithLimit(reader io.Reader, security MessageSecurity, fallbackTime time.Time, maxBytes uint32) (Message, error) {
+	limitedReader := &io.LimitedReader{R: reader, N: int64(maxBytes) + 1}
+	content, err := io.ReadAll(limitedReader)
+	if err != nil {
+		return Message{}, fmt.Errorf("read email message: %w", err)
+	}
+	if uint64(len(content)) > uint64(maxBytes) {
+		return Message{}, fmt.Errorf("email message exceeds size limit of %d bytes", maxBytes)
+	}
+	return decodeMessage(bytes.NewReader(content), security, fallbackTime)
+}
+
+func decodeMessage(reader io.Reader, security MessageSecurity, fallbackTime time.Time) (Message, error) {
 	mailMessage, err := mail.ReadMessage(reader)
 	if err != nil {
 		return Message{}, fmt.Errorf("read email message: %w", err)
@@ -184,7 +205,7 @@ func authenticationResultsValid(header string, security MessageSecurity) bool {
 
 	for _, result := range parts[1:] {
 		if strings.Contains(result, "dkim=pass") {
-			if match := dkimDomainPattern.FindStringSubmatch(result); match != nil && domainMatches(match[1], "cmbchina.com") {
+			if match := dkimDomainPattern.FindStringSubmatch(result); match != nil && domainMatches(strings.TrimPrefix(match[1], "@"), "cmbchina.com") {
 				return true
 			}
 		}

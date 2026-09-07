@@ -29,7 +29,8 @@ type emailBillUserService interface {
 
 type emailBillTransactionService interface {
 	HasEmailBillMarker(core.Context, int64, string) (bool, error)
-	CreateTransaction(core.Context, *models.Transaction, []int64, []int64) error
+	HasTransactionAtTime(core.Context, int64, int64) (bool, error)
+	CreateEmailBillTransaction(core.Context, *models.Transaction) error
 }
 
 type emailBillMailboxFactory func(*settings.EmailBillConfig, []emailbill.Parser) emailbill.Mailbox
@@ -102,15 +103,8 @@ func (s *EmailBillImportService) Import(c core.Context) error {
 				}
 
 				transaction := buildEmailBillTransaction(c, user.Uid, emailConfig, item, marker)
-				if createErr := s.transactions.CreateTransaction(c, transaction, nil, nil); createErr != nil {
-					exists, recheckErr := s.transactions.HasEmailBillMarker(c, user.Uid, marker)
-					if recheckErr == nil && exists {
-						continue
-					}
-					if recheckErr != nil {
-						return fmt.Errorf("create email bill transaction: %v; recheck marker: %w", createErr, recheckErr)
-					}
-					return fmt.Errorf("create email bill transaction: %w", createErr)
+				if createErr := s.createTransaction(c, transaction, marker); createErr != nil {
+					return createErr
 				}
 				log.Infof(c, "[email_bill_importer.Import] created transaction %d from %s email", transaction.TransactionId, item.Source)
 			}
@@ -120,13 +114,53 @@ func (s *EmailBillImportService) Import(c core.Context) error {
 	return nil
 }
 
+func (s *EmailBillImportService) createTransaction(c core.Context, transaction *models.Transaction, marker string) error {
+	baseTime := utils.GetMinTransactionTimeFromUnixTime(utils.GetUnixTimeFromTransactionTime(transaction.TransactionTime))
+	startOffset := emailBillTransactionTimeOffset(marker)
+
+	for attempt := int64(0); attempt < 999; attempt++ {
+		transaction.TransactionTime = baseTime + (startOffset+attempt)%999
+		occupied, err := s.transactions.HasTransactionAtTime(c, transaction.Uid, transaction.TransactionTime)
+		if err != nil {
+			return fmt.Errorf("check email bill transaction time: %w", err)
+		}
+		if occupied {
+			continue
+		}
+
+		createErr := s.transactions.CreateEmailBillTransaction(c, transaction)
+		if createErr == nil {
+			return nil
+		}
+
+		exists, recheckErr := s.transactions.HasEmailBillMarker(c, transaction.Uid, marker)
+		if recheckErr != nil {
+			return fmt.Errorf("create email bill transaction: %v; recheck marker: %w", createErr, recheckErr)
+		}
+		if exists {
+			return nil
+		}
+
+		occupied, occupiedErr := s.transactions.HasTransactionAtTime(c, transaction.Uid, transaction.TransactionTime)
+		if occupiedErr != nil {
+			return fmt.Errorf("create email bill transaction: %v; recheck time: %w", createErr, occupiedErr)
+		}
+		if !occupied {
+			return fmt.Errorf("create email bill transaction: %w", createErr)
+		}
+	}
+
+	return fmt.Errorf("create email bill transaction: no free transaction time within the source second")
+}
+
 func newEmailBillMailbox(config *settings.EmailBillConfig, parsers []emailbill.Parser) emailbill.Mailbox {
 	return emailbill.NewIMAPMailbox(emailbill.MailboxConfig{
-		Server:    config.IMAPServer,
-		Port:      config.IMAPPort,
-		Username:  config.MailUser,
-		Password:  config.MailPassword,
-		MaxEmails: config.MaxEmails,
+		Server:          config.IMAPServer,
+		Port:            config.IMAPPort,
+		Username:        config.MailUser,
+		Password:        config.MailPassword,
+		MaxEmails:       config.MaxEmails,
+		MaxMessageBytes: config.MaxMessageBytes,
 		Security: emailbill.MessageSecurity{
 			RequireAuthenticationResults: config.RequireAuthenticationResults,
 			TrustedAuthservDomains:       config.TrustedAuthservDomains,
@@ -177,6 +211,11 @@ func makeEmailBillMarker(fingerprint string, parsed emailbill.ParsedTransaction,
 
 func emailBillMarker(comment string) string {
 	return emailBillMarkerPattern.FindString(comment)
+}
+
+func emailBillTransactionTimeOffset(marker string) int64 {
+	digest := sha256.Sum256([]byte(marker))
+	return int64(uint16(digest[0])<<8|uint16(digest[1])) % 999
 }
 
 func trimRunes(value string, maximum int) string {

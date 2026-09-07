@@ -579,6 +579,15 @@ func (s *TransactionService) GetTransactionCount(c core.Context, uid int64, maxT
 
 // CreateTransaction saves a new transaction to database
 func (s *TransactionService) CreateTransaction(c core.Context, transaction *models.Transaction, tagIds []int64, pictureIds []int64) error {
+	return s.createTransaction(c, transaction, tagIds, pictureIds, true)
+}
+
+// CreateEmailBillTransaction saves an imported transaction at its exact deterministic time.
+func (s *TransactionService) CreateEmailBillTransaction(c core.Context, transaction *models.Transaction) error {
+	return s.createTransaction(c, transaction, nil, nil, false)
+}
+
+func (s *TransactionService) createTransaction(c core.Context, transaction *models.Transaction, tagIds []int64, pictureIds []int64, allowTransactionTimeRegeneration bool) error {
 	if transaction.Uid <= 0 {
 		return errs.ErrUserIdInvalid
 	}
@@ -618,7 +627,9 @@ func (s *TransactionService) CreateTransaction(c core.Context, transaction *mode
 		transaction.RelatedId = transactionUuids[1]
 	}
 
-	transaction.TransactionTime = utils.GetMinTransactionTimeFromUnixTime(utils.GetUnixTimeFromTransactionTime(transaction.TransactionTime))
+	if allowTransactionTimeRegeneration {
+		transaction.TransactionTime = utils.GetMinTransactionTimeFromUnixTime(utils.GetUnixTimeFromTransactionTime(transaction.TransactionTime))
+	}
 
 	transaction.CreatedUnixTime = now
 	transaction.UpdatedUnixTime = now
@@ -645,8 +656,20 @@ func (s *TransactionService) CreateTransaction(c core.Context, transaction *mode
 	userDataDb := s.UserDataDB(transaction.Uid)
 
 	return userDataDb.DoTransaction(c, func(sess *xorm.Session) error {
-		return s.doCreateTransaction(c, userDataDb, sess, transaction, transactionTagIndexes, tagIds, pictureIds, pictureUpdateModel)
+		return s.doCreateTransaction(c, userDataDb, sess, transaction, transactionTagIndexes, tagIds, pictureIds, pictureUpdateModel, allowTransactionTimeRegeneration)
 	})
+}
+
+// HasTransactionAtTime returns whether any transaction occupies the user's exact transaction time.
+func (s *TransactionService) HasTransactionAtTime(c core.Context, uid int64, transactionTime int64) (bool, error) {
+	if uid <= 0 {
+		return false, errs.ErrUserIdInvalid
+	}
+	return s.UserDataDB(uid).NewSession(c).
+		Cols("uid", "transaction_time").
+		Where("uid=? AND transaction_time=?", uid, transactionTime).
+		Limit(1).
+		Exist(&models.Transaction{})
 }
 
 // BatchCreateTransactions saves new transactions to database
@@ -757,7 +780,7 @@ func (s *TransactionService) BatchCreateTransactions(c core.Context, uid int64, 
 			transaction := transactions[i]
 			transactionTagIndexes := allTransactionTagIndexes[transaction.TransactionId]
 			transactionTagIds := allTransactionTagIds[transaction.TransactionId]
-			err := s.doCreateTransaction(c, userDataDb, sess, transaction, transactionTagIndexes, transactionTagIds, nil, nil)
+			err := s.doCreateTransaction(c, userDataDb, sess, transaction, transactionTagIndexes, transactionTagIds, nil, nil, true)
 
 			currentProcess = float64(i) / float64(len(transactions)) * 100
 
@@ -2717,7 +2740,7 @@ func (s *TransactionService) GetTransactionIds(transactions []*models.Transactio
 	return transactionIds
 }
 
-func (s *TransactionService) doCreateTransaction(c core.Context, database *datastore.Database, sess *xorm.Session, transaction *models.Transaction, transactionTagIndexes []*models.TransactionTagIndex, tagIds []int64, pictureIds []int64, pictureUpdateModel *models.TransactionPictureInfo) error {
+func (s *TransactionService) doCreateTransaction(c core.Context, database *datastore.Database, sess *xorm.Session, transaction *models.Transaction, transactionTagIndexes []*models.TransactionTagIndex, tagIds []int64, pictureIds []int64, pictureUpdateModel *models.TransactionPictureInfo, allowTransactionTimeRegeneration bool) error {
 	// Get and verify source and destination account
 	sourceAccount, destinationAccount, err := s.getAccountModels(sess, transaction)
 
@@ -2818,6 +2841,12 @@ func (s *TransactionService) doCreateTransaction(c core.Context, database *datas
 	createdRows, err := sess.Insert(transaction)
 
 	if err != nil || createdRows < 1 { // maybe another transaction has same time
+		if !allowTransactionTimeRegeneration {
+			if err != nil {
+				return err
+			}
+			return errs.ErrDatabaseOperationFailed
+		}
 		if err != nil {
 			log.Warnf(c, "[transactions.doCreateTransaction] cannot create trasaction, because %s, regenerate transaction time value", err.Error())
 		} else {

@@ -26,11 +26,14 @@ income_category_id = 202
 timezone = Asia/Shanghai
 cron_expression = 0 3 * * *
 max_emails = 60
+max_message_bytes = 2097152
 require_authentication_results = true
 trusted_authserv_domains = qq.com
 ```
 
 `mail_password` 应填写邮箱的 IMAP 应用授权码，不要使用网页登录密码。QQ、Foxmail、163、126、Yeah、Gmail、Outlook 和 Hotmail 可根据 `mail_user` 自动推断 `imap_server`；其他邮箱必须明确填写。
+
+`max_message_bytes` 限制单封邮件完整内容的下载和解码大小，默认 2 MiB，避免异常邮件占满主进程内存。
 
 `cron_expression` 使用五段 cron 格式：`分钟 小时 日 月 星期`，并按 `timezone` 执行。例如：
 

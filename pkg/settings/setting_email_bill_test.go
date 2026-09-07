@@ -43,6 +43,7 @@ income_category_id = 202
 	assert.Equal(t, "Asia/Shanghai", actual.Timezone)
 	assert.Equal(t, "0 3 * * *", actual.CronExpression)
 	assert.Equal(t, uint32(60), actual.MaxEmails)
+	assert.Equal(t, uint32(2*1024*1024), actual.MaxMessageBytes)
 	assert.True(t, actual.RequireAuthenticationResults)
 	assert.Equal(t, []string{"qq.com"}, actual.TrustedAuthservDomains)
 	assert.Equal(t, int64(101), actual.CMBCreditAccountID)
