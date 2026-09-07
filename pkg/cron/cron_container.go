@@ -78,11 +78,15 @@ func (c *CronJobSchedulerContainer) SyncRunJobNow(jobName string) error {
 
 func (c *CronJobSchedulerContainer) registerAllJobs(ctx core.Context, config *settings.Config) {
 	if config.EnableRemoveExpiredTokens {
-		Container.registerIntervalJob(ctx, RemoveExpiredTokensJob)
+		c.registerIntervalJob(ctx, RemoveExpiredTokensJob)
 	}
 
 	if config.EnableCreateScheduledTransaction {
-		Container.registerIntervalJob(ctx, CreateScheduledTransactionJob)
+		c.registerIntervalJob(ctx, CreateScheduledTransactionJob)
+	}
+
+	if config.EmailBillConfig != nil && config.EmailBillConfig.Enabled {
+		c.registerIntervalJob(ctx, NewEmailBillImportJob(config.EmailBillConfig.IntervalDuration))
 	}
 }
 

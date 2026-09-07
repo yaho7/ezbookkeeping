@@ -30,3 +30,17 @@ var CreateScheduledTransactionJob = &CronJob{
 		return services.Transactions.CreateScheduledTransactions(c, time.Now().Unix(), c.GetInterval())
 	},
 }
+
+// NewEmailBillImportJob returns the built-in email bill importer cron job.
+func NewEmailBillImportJob(interval time.Duration) *CronJob {
+	return &CronJob{
+		Name:        "ImportEmailBills",
+		Description: "Periodically import supported bank emails into native transactions.",
+		Period: CronJobIntervalPeriod{
+			Interval: interval,
+		},
+		Run: func(c *core.CronContext) error {
+			return services.EmailBillImporter.Import(c)
+		},
+	}
+}

@@ -87,6 +87,30 @@ func TestCronJobSchedulerContainerSyncRunJobNow(t *testing.T) {
 	assert.True(t, actualValue)
 }
 
+func TestCronJobSchedulerContainerRegistersEmailBillImporterWhenEnabled(t *testing.T) {
+	container := &CronJobSchedulerContainer{
+		allJobsMap:       make(map[string]*CronJob),
+		allGocronJobsMap: make(map[string]gocron.Job),
+	}
+	scheduler, err := gocron.NewScheduler()
+	assert.Nil(t, err)
+	container.scheduler = scheduler
+
+	container.registerAllJobs(core.NewNullContext(), &settings.Config{
+		EmailBillConfig: &settings.EmailBillConfig{
+			Enabled:          true,
+			IntervalDuration: time.Hour,
+		},
+	})
+
+	job, exists := container.allJobsMap["ImportEmailBills"]
+	assert.True(t, exists)
+	if exists {
+		assert.Equal(t, time.Hour, job.Period.GetInterval())
+	}
+	assert.Nil(t, scheduler.Shutdown())
+}
+
 func TestCronJobSchedulerContainerRepeatRun(t *testing.T) {
 	var err error
 

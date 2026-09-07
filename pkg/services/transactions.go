@@ -50,6 +50,21 @@ func (s *TransactionService) GetTotalTransactionCountByUid(c core.Context, uid i
 	return count, err
 }
 
+// HasEmailBillMarker returns whether a transaction already contains the importer marker.
+func (s *TransactionService) HasEmailBillMarker(c core.Context, uid int64, marker string) (bool, error) {
+	if uid <= 0 {
+		return false, errs.ErrUserIdInvalid
+	}
+	if marker == "" {
+		return false, nil
+	}
+	return s.UserDataDB(uid).NewSession(c).
+		Cols("uid", "comment").
+		Where("uid=? AND comment LIKE ?", uid, "%"+marker+"%").
+		Limit(1).
+		Exist(&models.Transaction{})
+}
+
 // GetAllTransactions returns all transactions
 func (s *TransactionService) GetAllTransactions(c core.Context, uid int64, pageCount int32, noDuplicated bool) ([]*models.Transaction, error) {
 	maxTransactionTime := utils.GetMaxTransactionTimeFromUnixTime(time.Now().Unix())
