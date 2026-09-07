@@ -76,7 +76,7 @@ func (m *IMAPMailbox) FetchRecent(ctx context.Context) ([]Message, error) {
 		return nil, nil
 	}
 
-	messageDates, err := m.fetchAuthenticatedHeaders(ctx, imapClient, uids)
+	messageDates, err := m.fetchMessageDatesWithinLimit(ctx, imapClient, uids)
 	if err != nil {
 		return nil, err
 	}
@@ -84,20 +84,19 @@ func (m *IMAPMailbox) FetchRecent(ctx context.Context) ([]Message, error) {
 		return nil, nil
 	}
 
-	authenticatedUIDs := make([]uint32, 0, len(messageDates))
-	for uid := range messageDates {
-		authenticatedUIDs = append(authenticatedUIDs, uid)
+	messageDates, err = m.fetchAuthenticatedHeaders(ctx, imapClient, sortedUIDs(messageDates), messageDates)
+	if err != nil {
+		return nil, err
 	}
-	sort.Slice(authenticatedUIDs, func(i, j int) bool { return authenticatedUIDs[i] < authenticatedUIDs[j] })
-	return m.fetchAuthenticatedBodies(ctx, imapClient, authenticatedUIDs, messageDates)
+	if len(messageDates) == 0 {
+		return nil, nil
+	}
+
+	return m.fetchAuthenticatedBodies(ctx, imapClient, sortedUIDs(messageDates), messageDates)
 }
 
-func (m *IMAPMailbox) fetchAuthenticatedHeaders(ctx context.Context, imapClient *client.Client, uids []uint32) (map[uint32]time.Time, error) {
+func (m *IMAPMailbox) fetchMessageDatesWithinLimit(ctx context.Context, imapClient *client.Client, uids []uint32) (map[uint32]time.Time, error) {
 	sequenceSet := sequenceSetForUIDs(uids)
-	headerSection := &imap.BodySectionName{
-		BodyPartName: imap.BodyPartName{Specifier: imap.HeaderSpecifier},
-		Peek:         true,
-	}
 	fetched := make(chan *imap.Message)
 	fetchErr := make(chan error, 1)
 	go func() {
@@ -105,7 +104,6 @@ func (m *IMAPMailbox) fetchAuthenticatedHeaders(ctx context.Context, imapClient 
 			imap.FetchUid,
 			imap.FetchInternalDate,
 			imap.FetchRFC822Size,
-			headerSection.FetchItem(),
 		}, fetched)
 	}()
 
@@ -117,7 +115,7 @@ func (m *IMAPMailbox) fetchAuthenticatedHeaders(ctx context.Context, imapClient 
 		case fetchedMessage, ok := <-fetched:
 			if !ok {
 				if err := <-fetchErr; err != nil {
-					return nil, fmt.Errorf("fetch IMAP message headers: %w", err)
+					return nil, fmt.Errorf("fetch IMAP message sizes: %w", err)
 				}
 				return messageDates, nil
 			}
@@ -127,15 +125,51 @@ func (m *IMAPMailbox) fetchAuthenticatedHeaders(ctx context.Context, imapClient 
 			if fetchedMessage.Size > m.maxMessageBytes() {
 				continue
 			}
+			messageDates[fetchedMessage.Uid] = fetchedMessage.InternalDate
+		}
+	}
+}
+
+func (m *IMAPMailbox) fetchAuthenticatedHeaders(ctx context.Context, imapClient *client.Client, uids []uint32, messageDates map[uint32]time.Time) (map[uint32]time.Time, error) {
+	sequenceSet := sequenceSetForUIDs(uids)
+	headerSection := &imap.BodySectionName{
+		BodyPartName: imap.BodyPartName{Specifier: imap.HeaderSpecifier},
+		Peek:         true,
+		Partial:      []int{0, int(m.maxMessageBytes()) + 1},
+	}
+	fetched := make(chan *imap.Message)
+	fetchErr := make(chan error, 1)
+	go func() {
+		fetchErr <- imapClient.UidFetch(sequenceSet, []imap.FetchItem{
+			imap.FetchUid,
+			headerSection.FetchItem(),
+		}, fetched)
+	}()
+
+	authenticatedDates := make(map[uint32]time.Time, len(uids))
+	for {
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case fetchedMessage, ok := <-fetched:
+			if !ok {
+				if err := <-fetchErr; err != nil {
+					return nil, fmt.Errorf("fetch IMAP message headers: %w", err)
+				}
+				return authenticatedDates, nil
+			}
+			if fetchedMessage == nil {
+				continue
+			}
 			header := fetchedMessage.GetBody(headerSection)
 			if header == nil {
 				continue
 			}
-			decoded, decodeErr := DecodeMessageWithLimit(header, m.config.Security, fetchedMessage.InternalDate, m.maxMessageBytes())
+			decoded, decodeErr := DecodeMessageWithLimit(header, m.config.Security, messageDates[fetchedMessage.Uid], m.maxMessageBytes())
 			if decodeErr != nil || !decoded.Authenticated || !m.supported(decoded) {
 				continue
 			}
-			messageDates[fetchedMessage.Uid] = fetchedMessage.InternalDate
+			authenticatedDates[fetchedMessage.Uid] = messageDates[fetchedMessage.Uid]
 		}
 	}
 }
@@ -194,6 +228,15 @@ func sequenceSetForUIDs(uids []uint32) *imap.SeqSet {
 	sequenceSet := new(imap.SeqSet)
 	sequenceSet.AddNum(uids...)
 	return sequenceSet
+}
+
+func sortedUIDs(messageDates map[uint32]time.Time) []uint32 {
+	uids := make([]uint32, 0, len(messageDates))
+	for uid := range messageDates {
+		uids = append(uids, uid)
+	}
+	sort.Slice(uids, func(i, j int) bool { return uids[i] < uids[j] })
+	return uids
 }
 
 func (m *IMAPMailbox) searchSupportedUIDs(imapClient *client.Client) ([]uint32, error) {
