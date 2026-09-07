@@ -67,6 +67,7 @@ class Settings:
     max_emails: int
     poll_interval_seconds: int
     run_once: bool
+    require_authentication_results: bool
 
     @classmethod
     def from_env(cls, env: Mapping[str, str] | None = None) -> "Settings":
@@ -120,6 +121,9 @@ class Settings:
                 values, "POLL_INTERVAL_SECONDS", 3600
             ),
             run_once=_boolean(values, "RUN_ONCE", False),
+            require_authentication_results=_boolean(
+                values, "REQUIRE_AUTHENTICATION_RESULTS", True
+            ),
         )
 
     def account_id_for(self, source: str) -> str:

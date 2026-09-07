@@ -6,9 +6,10 @@
 
 - 招商银行信用卡“每日信用管家”邮件
 - 招商银行储蓄卡动账通知邮件
-- 严格校验发件人，非招行邮件不会进入解析
+- 在服务端按招行发件人和主题筛选，并默认要求邮箱服务商写入的首个 `Authentication-Results` 表明招行域名通过 SPF 或 DKIM
 - 支出、退款和入账分别映射为 ezBookkeeping 支出或收入
 - SQLite 保存邮件和逐笔同步状态，容器重启后继续未完成任务
+- 多个导入器意外同时运行时，通过 SQLite 租约避免同时发送同一笔待同步记录；解析异常的邮件会在下一轮重试
 - 每笔备注包含 `ebk-mail:...` 幂等标记；即使 API 已成功但本地状态尚未写回，下一轮也会先查询远端，避免重复入账
 
 参考项目 README 中提到的支付宝、微信和建行解析器并未在其当前 `main.py` 中启用，因此本次没有把文档中的历史描述当成现有能力复制。Notion、Server 酱和独立 CSV 也没有保留，因为 ezBookkeeping 已经是本改造的主数据与查看界面。
@@ -68,7 +69,9 @@ docker compose logs -f email-bill-importer
 docker compose restart email-bill-importer
 ```
 
-默认每小时检查一次最近 60 封邮件。可通过 `.env` 的 `POLL_INTERVAL_SECONDS` 与 `MAX_EMAILS` 调整。首次导入前如果邮箱历史邮件很多，应适当提高 `MAX_EMAILS`；导入器只会处理主题和发件人均匹配的邮件。
+默认每小时按受支持的发件人和主题组合检查最近 60 封匹配邮件。可通过 `.env` 的 `POLL_INTERVAL_SECONDS` 与 `MAX_EMAILS` 调整。首次导入前如果邮箱历史邮件很多，应适当提高 `MAX_EMAILS`。
+
+默认的 `REQUIRE_AUTHENTICATION_RESULTS=true` 会读取邮箱服务商添加在最前面的认证结果，降低伪造 `From` 地址造成错误入账的风险。若服务商没有提供该邮件头，日志会显示邮件因未通过认证而被拒绝；确认邮箱链路可信后，才可把该值改为 `false`。导入器自身不执行完整 DKIM 密码学验证。
 
 持久化数据位于三个 Compose 命名卷：
 
@@ -93,3 +96,4 @@ docker compose run --rm -e RUN_ONCE=true email-bill-importer
 - `api token is not enabled`：确认 Compose 中保留了 `EBK_SECURITY_ENABLE_API_TOKEN=true` 并重建主服务。
 - `ezBookkeeping API rejected request`：令牌过期，或账户/分类 ID 不属于该令牌对应的用户。
 - IMAP 登录失败：确认邮箱已启用 IMAP，且 `MAIL_PASS` 使用应用授权码。
+- 日志出现 `rejected mail without passing bank authentication results`：邮箱服务商没有提供可识别的招行 SPF/DKIM 结果；优先检查原始邮件头，确认链路可信后才考虑关闭 `REQUIRE_AUTHENTICATION_RESULTS`。

@@ -56,6 +56,29 @@ class OutboxTestCase(unittest.TestCase):
 
                 self.assertEqual(len(outbox.pending_transactions()), 1)
 
+    def test_pending_transaction_can_only_be_claimed_by_one_worker(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "importer.db"
+            transaction = BankTransaction(
+                source="cmb_credit",
+                occurred_at=datetime(
+                    2026, 9, 7, 9, 0, tzinfo=ZoneInfo("Asia/Shanghai")
+                ),
+                amount_minor=-100,
+                merchant="商户",
+                description="消费",
+            )
+            with Outbox(path, worker_id="worker-one") as first, Outbox(
+                path, worker_id="worker-two"
+            ) as second:
+                first.record_message("message", "通知", [transaction])
+
+                first_claim = first.claim_next(now=1000, lease_seconds=300)
+                second_claim = second.claim_next(now=1000, lease_seconds=300)
+
+                self.assertIsNotNone(first_claim)
+                self.assertIsNone(second_claim)
+
 
 if __name__ == "__main__":
     unittest.main()

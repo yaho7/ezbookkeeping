@@ -27,6 +27,7 @@ class RunSummary:
     imported: int = 0
     recovered: int = 0
     failed: int = 0
+    rejected: int = 0
 
 
 class EmailBillService:
@@ -37,16 +38,18 @@ class EmailBillService:
         api_client: EzBookkeepingClient,
         parsers: Sequence[BillParser],
         max_emails: int,
+        require_authenticated_messages: bool,
     ) -> None:
         self.mailbox = mailbox
         self.outbox = outbox
         self.api_client = api_client
         self.parsers = parsers
         self.max_emails = max_emails
+        self.require_authenticated_messages = require_authenticated_messages
 
     def run_once(self) -> RunSummary:
         messages = self.mailbox.fetch_recent(self.max_emails)
-        matched = queued = imported = recovered = failed = 0
+        matched = queued = imported = recovered = failed = rejected = 0
 
         for message in messages:
             parser = next(
@@ -60,6 +63,13 @@ class EmailBillService:
             if parser is None:
                 continue
             matched += 1
+            if self.require_authenticated_messages and not message.authenticated:
+                rejected += 1
+                LOGGER.warning(
+                    "rejected mail without passing bank authentication results: %s",
+                    message.fingerprint[:12],
+                )
+                continue
             message_key = hashlib.sha256(
                 f"{PARSER_SCHEMA_VERSION}:{message.fingerprint}".encode("utf-8")
             ).hexdigest()
@@ -77,7 +87,7 @@ class EmailBillService:
                 )
                 LOGGER.exception("failed to parse mail %s", message.fingerprint[:12])
 
-        for item in self.outbox.pending_transactions():
+        while item := self.outbox.claim_next():
             try:
                 remote_id = self.api_client.find_transaction(
                     item.marker, item.transaction.occurred_at
@@ -102,4 +112,5 @@ class EmailBillService:
             imported=imported,
             recovered=recovered,
             failed=failed,
+            rejected=rejected,
         )

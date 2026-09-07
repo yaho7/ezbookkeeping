@@ -132,6 +132,16 @@ class CmbDebitCardParser(BillParser):
             1,
             "入账",
         ),
+        (
+            re.compile(
+                r"(资金归集[^。；]*?).*?(?:向|从|由|转账).*?(?:人民币)?"
+                r"(\d+(?:\.\d+)?)元.*?截至(\d{2}月\d{2}日)(\d{2}:\d{2})",
+                re.DOTALL,
+            ),
+            {"merchant_prefix": 1, "amount": 2, "date": 3, "time": 4},
+            1,
+            "入账",
+        ),
     )
 
     def parse(self, text: str, received_at: datetime) -> list[BankTransaction]:
@@ -146,9 +156,13 @@ class CmbDebitCardParser(BillParser):
                 ):
                     continue
                 matched_spans.append(match.span())
-                merchant = (match.group(groups["merchant"]) or "招商银行").strip(
-                    " ，,"
-                )
+                if "merchant_prefix" in groups:
+                    prefix = match.group(groups["merchant_prefix"]).strip(" ，,")
+                    merchant = f"招行-{prefix[:20]}"
+                else:
+                    merchant = (
+                        match.group(groups["merchant"]) or "招商银行"
+                    ).strip(" ，,")
                 amount_minor = sign * money_to_minor(match.group(groups["amount"]))
                 if amount_minor == 0:
                     continue

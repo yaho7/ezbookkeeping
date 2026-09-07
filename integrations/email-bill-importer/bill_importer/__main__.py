@@ -19,23 +19,25 @@ def main() -> None:
     settings = Settings.from_env()
     with Outbox(settings.state_path) as outbox:
         service = EmailBillService(
-            mailbox=ImapMailbox(settings),
+            mailbox=ImapMailbox(settings, parsers=DEFAULT_PARSERS),
             outbox=outbox,
             api_client=EzBookkeepingClient(settings),
             parsers=DEFAULT_PARSERS,
             max_emails=settings.max_emails,
+            require_authenticated_messages=settings.require_authentication_results,
         )
         while True:
             try:
                 summary = service.run_once()
                 logging.info(
                     "mail import finished: fetched=%d matched=%d queued=%d "
-                    "imported=%d recovered=%d failed=%d",
+                    "imported=%d recovered=%d rejected=%d failed=%d",
                     summary.fetched,
                     summary.matched,
                     summary.queued,
                     summary.imported,
                     summary.recovered,
+                    summary.rejected,
                     summary.failed,
                 )
             except Exception:

@@ -29,6 +29,7 @@ class SettingsTestCase(unittest.TestCase):
         self.assertEqual(settings.imap_server, "imap.qq.com")
         self.assertEqual(settings.ebk_server_base_url, "http://ezbookkeeping:8080")
         self.assertEqual(settings.timezone_name, "Asia/Shanghai")
+        self.assertTrue(settings.require_authentication_results)
         self.assertEqual(settings.account_id_for("cmb_credit"), "101")
         self.assertEqual(settings.category_id_for(-1), "201")
         self.assertEqual(settings.category_id_for(1), "202")

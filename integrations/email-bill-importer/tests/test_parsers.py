@@ -96,6 +96,19 @@ class CmbDebitCardParserTestCase(unittest.TestCase):
         self.assertEqual(transactions[0].amount_minor, 123456)
         self.assertEqual(transactions[0].merchant, "工资")
 
+    def test_parses_funds_aggregation_with_postfixed_date(self) -> None:
+        text = (
+            "资金归集执行成功，已从其他账户向您尾号1234账户转账人民币500.00元，"
+            "截至09月07日18:35。"
+        )
+
+        transactions = self.parser.parse(text, self.received_at)
+
+        self.assertEqual(len(transactions), 1)
+        self.assertEqual(transactions[0].amount_minor, 50000)
+        self.assertEqual(transactions[0].occurred_at.hour, 18)
+        self.assertIn("资金归集", transactions[0].merchant)
+
 
 if __name__ == "__main__":
     unittest.main()

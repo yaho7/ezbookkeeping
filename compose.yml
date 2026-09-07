@@ -34,6 +34,7 @@ services:
       MAX_EMAILS: ${MAX_EMAILS:-60}
       POLL_INTERVAL_SECONDS: ${POLL_INTERVAL_SECONDS:-3600}
       RUN_ONCE: ${RUN_ONCE:-false}
+      REQUIRE_AUTHENTICATION_RESULTS: ${REQUIRE_AUTHENTICATION_RESULTS:-true}
       STATE_PATH: /data/importer.db
     volumes:
       - email-bill-importer-data:/data

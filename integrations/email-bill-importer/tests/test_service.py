@@ -38,13 +38,25 @@ class FakeApiClient:
         return "new-9002"
 
 
-def mail_message() -> MailMessage:
+class FailsOnceCreditCardParser(CmbCreditCardParser):
+    def __init__(self) -> None:
+        self.attempts = 0
+
+    def parse(self, text: str, received_at: datetime):
+        self.attempts += 1
+        if self.attempts == 1:
+            raise ValueError("temporary parser failure")
+        return super().parse(text, received_at)
+
+
+def mail_message(*, authenticated: bool = True) -> MailMessage:
     return MailMessage(
         fingerprint="mail-fingerprint",
         sender="ccsvc@message.cmbchina.com",
         subject="招商银行每日信用管家",
         received_at=datetime(2026, 9, 7, 9, 0, tzinfo=ZoneInfo("Asia/Shanghai")),
         text="2026/09/06 11:03:15 CNY 1.53 尾号5460 消费 麦当劳 (每日邮件)",
+        authenticated=authenticated,
     )
 
 
@@ -59,6 +71,7 @@ class EmailBillServiceTestCase(unittest.TestCase):
                     api_client=api,
                     parsers=(CmbCreditCardParser(),),
                     max_emails=50,
+                    require_authenticated_messages=True,
                 )
 
                 summary = service.run_once()
@@ -78,6 +91,7 @@ class EmailBillServiceTestCase(unittest.TestCase):
                     api_client=api,
                     parsers=(CmbCreditCardParser(),),
                     max_emails=50,
+                    require_authenticated_messages=True,
                 )
 
                 first = service.run_once()
@@ -85,6 +99,47 @@ class EmailBillServiceTestCase(unittest.TestCase):
 
                 self.assertEqual(first.imported, 1)
                 self.assertEqual(second.imported, 0)
+                self.assertEqual(len(api.added), 1)
+
+    def test_rejects_spoofed_sender_without_authentication_result(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            with Outbox(Path(directory) / "importer.db") as outbox:
+                api = FakeApiClient()
+                service = EmailBillService(
+                    mailbox=FakeMailbox([mail_message(authenticated=False)]),
+                    outbox=outbox,
+                    api_client=api,
+                    parsers=(CmbCreditCardParser(),),
+                    max_emails=50,
+                    require_authenticated_messages=True,
+                )
+
+                summary = service.run_once()
+
+                self.assertEqual(summary.rejected, 1)
+                self.assertEqual(api.added, [])
+                self.assertEqual(outbox.pending_transactions(), [])
+
+    def test_retries_message_after_parser_failure(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            with Outbox(Path(directory) / "importer.db") as outbox:
+                api = FakeApiClient()
+                parser = FailsOnceCreditCardParser()
+                service = EmailBillService(
+                    mailbox=FakeMailbox([mail_message()]),
+                    outbox=outbox,
+                    api_client=api,
+                    parsers=(parser,),
+                    max_emails=50,
+                    require_authenticated_messages=True,
+                )
+
+                first = service.run_once()
+                second = service.run_once()
+
+                self.assertEqual(first.failed, 1)
+                self.assertEqual(second.imported, 1)
+                self.assertEqual(parser.attempts, 2)
                 self.assertEqual(len(api.added), 1)
 
 

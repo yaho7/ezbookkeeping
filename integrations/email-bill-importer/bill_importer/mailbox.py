@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import imaplib
+import re
 import ssl
 from dataclasses import dataclass
 from datetime import datetime
@@ -10,9 +11,11 @@ from email.message import Message
 from email.parser import BytesParser
 from email.utils import parsedate_to_datetime
 from html.parser import HTMLParser
+from typing import Sequence
 from zoneinfo import ZoneInfo
 
 from .config import Settings
+from .parsers import BillParser
 
 
 @dataclass(frozen=True, slots=True)
@@ -22,6 +25,7 @@ class MailMessage:
     subject: str
     received_at: datetime
     text: str
+    authenticated: bool
 
 
 class _TextExtractor(HTMLParser):
@@ -72,9 +76,48 @@ def _fingerprint(message: Message, received_at: datetime, text: str) -> str:
     return hashlib.sha256(identity.encode("utf-8", errors="replace")).hexdigest()
 
 
+def _has_bank_authentication_result(message: Message) -> bool:
+    authentication_results = message.get_all("Authentication-Results", [])
+    if not authentication_results:
+        return False
+    result = " ".join(str(authentication_results[0]).lower().split())
+    dkim_passed = re.search(
+        r"\bdkim=pass\b.*?\bheader\.(?:d|i)=(?:@)?(?:message\.)?cmbchina\.com\b",
+        result,
+    )
+    spf_passed = re.search(
+        r"\bspf=pass\b.*?\bsmtp\.mailfrom=[^\s;]*@(?:message\.)?cmbchina\.com\b",
+        result,
+    )
+    return dkim_passed is not None or spf_passed is not None
+
+
 class ImapMailbox:
-    def __init__(self, settings: Settings) -> None:
+    def __init__(self, settings: Settings, parsers: Sequence[BillParser]) -> None:
         self.settings = settings
+        self.parsers = parsers
+
+    def _search_message_ids(
+        self, connection: imaplib.IMAP4_SSL, limit: int
+    ) -> list[bytes]:
+        message_ids: set[bytes] = set()
+        for parser in self.parsers:
+            for sender in parser.allowed_senders:
+                for subject_keyword in parser.subject_keywords:
+                    try:
+                        status, search_data = connection.search(
+                            "UTF-8",
+                            "FROM",
+                            sender,
+                            "SUBJECT",
+                            subject_keyword.encode("utf-8"),
+                        )
+                    except (imaplib.IMAP4.error, UnicodeEncodeError):
+                        status, search_data = connection.search(None, "FROM", sender)
+                    if status != "OK":
+                        raise RuntimeError("cannot search IMAP inbox")
+                    message_ids.update(search_data[0].split()[-limit:])
+        return sorted(message_ids, key=lambda value: int(value), reverse=True)
 
     def fetch_recent(self, limit: int) -> list[MailMessage]:
         timezone = ZoneInfo(self.settings.timezone_name)
@@ -90,12 +133,9 @@ class ImapMailbox:
             status, _ = connection.select("INBOX", readonly=True)
             if status != "OK":
                 raise RuntimeError("cannot select IMAP inbox")
-            status, search_data = connection.search(None, "ALL")
-            if status != "OK":
-                raise RuntimeError("cannot search IMAP inbox")
-            message_ids = search_data[0].split()[-limit:]
+            message_ids = self._search_message_ids(connection, limit)
             messages: list[MailMessage] = []
-            for message_id in reversed(message_ids):
+            for message_id in message_ids:
                 status, fetched = connection.fetch(message_id, "(RFC822)")
                 if status != "OK" or not fetched or not isinstance(fetched[0], tuple):
                     continue
@@ -117,11 +157,12 @@ class ImapMailbox:
                         subject=str(parsed.get("Subject", "")),
                         received_at=received_at,
                         text=" ".join(text.split()),
+                        authenticated=_has_bank_authentication_result(parsed),
                     )
                 )
             return messages
         finally:
             try:
                 connection.logout()
-            except imaplib.IMAP4.error:
+            except (imaplib.IMAP4.error, OSError):
                 pass
