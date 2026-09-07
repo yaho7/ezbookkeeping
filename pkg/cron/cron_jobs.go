@@ -1,6 +1,7 @@
 package cron
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/mayswind/ezbookkeeping/pkg/core"
@@ -32,12 +33,12 @@ var CreateScheduledTransactionJob = &CronJob{
 }
 
 // NewEmailBillImportJob returns the built-in email bill importer cron job.
-func NewEmailBillImportJob(interval time.Duration) *CronJob {
+func NewEmailBillImportJob(cronExpression string, timezone string) *CronJob {
 	return &CronJob{
 		Name:        "ImportEmailBills",
 		Description: "Periodically import supported bank emails into native transactions.",
-		Period: CronJobIntervalPeriod{
-			Interval: interval,
+		Period: CronJobExpressionPeriod{
+			Expression: fmt.Sprintf("CRON_TZ=%s %s", timezone, cronExpression),
 		},
 		Run: func(c *core.CronContext) error {
 			return services.EmailBillImporter.Import(c)

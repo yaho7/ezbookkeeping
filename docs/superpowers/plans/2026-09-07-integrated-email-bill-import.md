@@ -99,7 +99,7 @@ Add `github.com/emersion/go-imap v1.2.1`. Search by supported sender, fetch newe
 
 - [ ] **Step 4: Add `[email_bill]` settings**
 
-Support INI keys and automatic `EBK_EMAIL_BILL_*` overrides for `enabled`, `target_user`, mailbox credentials/server/port, account/category IDs, timezone, interval, limit, authentication requirement, and trusted auth-service domains. Reject incomplete enabled configurations at startup.
+Support INI keys and automatic `EBK_EMAIL_BILL_*` overrides for `enabled`, `target_user`, mailbox credentials/server/port, account/category IDs, timezone, five-field cron expression, limit, authentication requirement, and trusted auth-service domains. Reject incomplete enabled configurations at startup.
 
 - [ ] **Step 5: Run tests and confirm GREEN**
 
@@ -150,7 +150,7 @@ Resolve `target_user`, create `models.Transaction` values with existing account/
 
 - [ ] **Step 4: Register native cron job**
 
-Create an interval job using the configured duration and `gocron.WithSingletonMode`. Keep the importer disabled unless `[email_bill].enabled=true`.
+Create a cron-expression job using the configured timezone and `gocron.WithSingletonMode`. Keep the importer disabled unless `[email_bill].enabled=true`.
 
 - [ ] **Step 5: Run focused tests and confirm GREEN**
 

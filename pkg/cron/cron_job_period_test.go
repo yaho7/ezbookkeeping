@@ -54,6 +54,30 @@ func TestCronJobNextRunTimeWithIntervalPeriod(t *testing.T) {
 	assert.Nil(t, err)
 }
 
+func TestCronJobNextRunTimeWithExpressionPeriod(t *testing.T) {
+	scheduler, err := gocron.NewScheduler()
+	assert.Nil(t, err)
+
+	period := CronJobExpressionPeriod{Expression: "CRON_TZ=Asia/Shanghai 30 8 * * 1-5"}
+	job, err := scheduler.NewJob(
+		period.ToJobDefinition(),
+		gocron.NewTask(func() {}),
+	)
+	assert.Nil(t, err)
+	scheduler.Start()
+
+	nextRunTime, err := job.NextRun()
+	assert.Nil(t, err)
+	shanghai, err := time.LoadLocation("Asia/Shanghai")
+	assert.Nil(t, err)
+	localNextRunTime := nextRunTime.In(shanghai)
+	assert.Equal(t, 8, localNextRunTime.Hour())
+	assert.Equal(t, 30, localNextRunTime.Minute())
+	assert.Contains(t, []time.Weekday{time.Monday, time.Tuesday, time.Wednesday, time.Thursday, time.Friday}, localNextRunTime.Weekday())
+	assert.Greater(t, period.GetInterval(), time.Duration(0))
+	assert.Nil(t, scheduler.Shutdown())
+}
+
 func TestCronJobNextRunTimeWithFixedHourPeriod(t *testing.T) {
 	scheduler, err := gocron.NewScheduler(
 		gocron.WithLocation(time.Local),

@@ -2,7 +2,6 @@ package settings
 
 import (
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -42,12 +41,31 @@ income_category_id = 202
 	assert.Equal(t, "imap.qq.com", actual.IMAPServer)
 	assert.Equal(t, uint16(993), actual.IMAPPort)
 	assert.Equal(t, "Asia/Shanghai", actual.Timezone)
-	assert.Equal(t, time.Hour, actual.IntervalDuration)
+	assert.Equal(t, "0 3 * * *", actual.CronExpression)
 	assert.Equal(t, uint32(60), actual.MaxEmails)
 	assert.True(t, actual.RequireAuthenticationResults)
 	assert.Equal(t, []string{"qq.com"}, actual.TrustedAuthservDomains)
 	assert.Equal(t, int64(101), actual.CMBCreditAccountID)
 	assert.Equal(t, int64(202), actual.IncomeCategoryID)
+}
+
+func TestLoadEmailBillConfigurationRejectsInvalidCronExpression(t *testing.T) {
+	configFile, err := ini.Load([]byte(`[email_bill]
+enabled = true
+target_user = alice
+mail_user = alice@qq.com
+mail_password = app-password
+cmb_credit_account_id = 101
+cmb_debit_account_id = 102
+expense_category_id = 201
+income_category_id = 202
+cron_expression = every morning
+`))
+	require.NoError(t, err)
+
+	err = loadEmailBillConfiguration(&Config{}, configFile, "email_bill")
+
+	require.ErrorContains(t, err, "cron_expression")
 }
 
 func TestLoadEmailBillConfigurationRejectsMissingRequiredValue(t *testing.T) {

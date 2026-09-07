@@ -24,13 +24,19 @@ cmb_debit_account_id = 102
 expense_category_id = 201
 income_category_id = 202
 timezone = Asia/Shanghai
-interval_seconds = 3600
+cron_expression = 0 3 * * *
 max_emails = 60
 require_authentication_results = true
 trusted_authserv_domains = qq.com
 ```
 
 `mail_password` 应填写邮箱的 IMAP 应用授权码，不要使用网页登录密码。QQ、Foxmail、163、126、Yeah、Gmail、Outlook 和 Hotmail 可根据 `mail_user` 自动推断 `imap_server`；其他邮箱必须明确填写。
+
+`cron_expression` 使用五段 cron 格式：`分钟 小时 日 月 星期`，并按 `timezone` 执行。例如：
+
+- `0 3 * * *`：每天 03:00
+- `30 8 * * 1-5`：周一至周五 08:30
+- `0 6 * * 1`：每周一 06:00
 
 账户和分类 ID 必须属于 `target_user`。如需使用仓库内工具查询 ID，可临时在 `[security]` 开启 API Token 后执行：
 
@@ -41,7 +47,7 @@ sh skills/ezbookkeeping/scripts/ebktools.sh accounts-list
 sh skills/ezbookkeeping/scripts/ebktools.sh transaction-categories-list
 ```
 
-所有配置也支持项目原有的环境变量覆盖规则，例如 `EBK_EMAIL_BILL_ENABLED`、`EBK_EMAIL_BILL_MAIL_PASSWORD`。敏感值还可以使用文件变量，例如 `EBKCFP_EMAIL_BILL_MAIL_PASSWORD=/run/secrets/mail_password`。
+所有配置也支持项目原有的环境变量覆盖规则，例如 `EBK_EMAIL_BILL_ENABLED`、`EBK_EMAIL_BILL_CRON_EXPRESSION`、`EBK_EMAIL_BILL_MAIL_PASSWORD`。敏感值还可以使用文件变量，例如 `EBKCFP_EMAIL_BILL_MAIL_PASSWORD=/run/secrets/mail_password`。
 
 ## 运行
 

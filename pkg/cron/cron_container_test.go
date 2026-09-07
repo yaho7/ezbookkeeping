@@ -98,15 +98,18 @@ func TestCronJobSchedulerContainerRegistersEmailBillImporterWhenEnabled(t *testi
 
 	container.registerAllJobs(core.NewNullContext(), &settings.Config{
 		EmailBillConfig: &settings.EmailBillConfig{
-			Enabled:          true,
-			IntervalDuration: time.Hour,
+			Enabled:        true,
+			CronExpression: "30 8 * * 1-5",
+			Timezone:       "Asia/Shanghai",
 		},
 	})
 
 	job, exists := container.allJobsMap["ImportEmailBills"]
 	assert.True(t, exists)
 	if exists {
-		assert.Equal(t, time.Hour, job.Period.GetInterval())
+		period, ok := job.Period.(CronJobExpressionPeriod)
+		assert.True(t, ok)
+		assert.Equal(t, "CRON_TZ=Asia/Shanghai 30 8 * * 1-5", period.Expression)
 	}
 	assert.Nil(t, scheduler.Shutdown())
 }

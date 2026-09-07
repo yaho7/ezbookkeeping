@@ -86,7 +86,7 @@ func (c *CronJobSchedulerContainer) registerAllJobs(ctx core.Context, config *se
 	}
 
 	if config.EmailBillConfig != nil && config.EmailBillConfig.Enabled {
-		c.registerIntervalJob(ctx, NewEmailBillImportJob(config.EmailBillConfig.IntervalDuration))
+		c.registerIntervalJob(ctx, NewEmailBillImportJob(config.EmailBillConfig.CronExpression, config.EmailBillConfig.Timezone))
 	}
 }
 

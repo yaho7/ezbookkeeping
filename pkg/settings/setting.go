@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	robfigcron "github.com/robfig/cron/v3"
 	"gopkg.in/ini.v1"
 
 	"github.com/mayswind/ezbookkeeping/pkg/core"
@@ -208,9 +209,9 @@ const (
 
 	defaultImportFileMaxSize uint32 = 10485760 // 10MB
 
-	defaultEmailBillIMAPPort        uint16 = 993
-	defaultEmailBillIntervalSeconds uint32 = 3600
-	defaultEmailBillMaxEmails       uint32 = 60
+	defaultEmailBillIMAPPort       uint16 = 993
+	defaultEmailBillCronExpression        = "0 3 * * *"
+	defaultEmailBillMaxEmails      uint32 = 60
 
 	defaultExchangeRatesDataRequestTimeout uint32 = 10000 // 10 seconds
 )
@@ -254,8 +255,7 @@ type EmailBillConfig struct {
 	ExpenseCategoryID            int64
 	IncomeCategoryID             int64
 	Timezone                     string
-	IntervalSeconds              uint32
-	IntervalDuration             time.Duration
+	CronExpression               string
 	MaxEmails                    uint32
 	RequireAuthenticationResults bool
 	TrustedAuthservDomains       []string
@@ -1065,7 +1065,7 @@ func loadEmailBillConfiguration(config *Config, configFile *ini.File, sectionNam
 		MailUser:                     strings.TrimSpace(getConfigItemStringValue(configFile, sectionName, "mail_user")),
 		MailPassword:                 getConfigItemStringValue(configFile, sectionName, "mail_password"),
 		Timezone:                     getConfigItemStringValue(configFile, sectionName, "timezone", "Asia/Shanghai"),
-		IntervalSeconds:              getConfigItemUint32Value(configFile, sectionName, "interval_seconds", defaultEmailBillIntervalSeconds),
+		CronExpression:               strings.TrimSpace(getConfigItemStringValue(configFile, sectionName, "cron_expression", defaultEmailBillCronExpression)),
 		MaxEmails:                    getConfigItemUint32Value(configFile, sectionName, "max_emails", defaultEmailBillMaxEmails),
 		RequireAuthenticationResults: getConfigItemBoolValue(configFile, sectionName, "require_authentication_results", true),
 	}
@@ -1115,16 +1115,15 @@ func loadEmailBillConfiguration(config *Config, configFile *ini.File, sectionNam
 		return err
 	}
 
-	if emailBillConfig.IntervalSeconds < 60 {
-		return fmt.Errorf("email bill configuration interval_seconds must be at least 60")
-	}
 	if emailBillConfig.MaxEmails < 1 {
 		return fmt.Errorf("email bill configuration max_emails must be at least 1")
+	}
+	if _, err = robfigcron.ParseStandard(emailBillConfig.CronExpression); err != nil {
+		return fmt.Errorf("invalid email bill cron_expression %q: %w", emailBillConfig.CronExpression, err)
 	}
 	if _, err = time.LoadLocation(emailBillConfig.Timezone); err != nil {
 		return fmt.Errorf("invalid email bill timezone %q: %w", emailBillConfig.Timezone, err)
 	}
-	emailBillConfig.IntervalDuration = time.Duration(emailBillConfig.IntervalSeconds) * time.Second
 
 	trustedDomains := getConfigItemStringValue(configFile, sectionName, "trusted_authserv_domains", mailDomain)
 	for _, domain := range strings.Split(trustedDomains, ",") {
