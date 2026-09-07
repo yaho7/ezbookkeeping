@@ -1,9 +1,7 @@
-name: Build and Publish Docker Images
+name: Build and Publish Docker Image
 
 on:
   push:
-    branches:
-      - '**'
   workflow_dispatch:
 
 permissions:
@@ -16,22 +14,8 @@ concurrency:
 
 jobs:
   publish:
-    name: ${{ matrix.name }}
+    name: ezBookkeeping
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - name: ezBookkeeping
-            context: .
-            file: ./Dockerfile
-            image_suffix: ''
-            cache_scope: ezbookkeeping
-          - name: Email bill importer
-            context: ./integrations/email-bill-importer
-            file: ./integrations/email-bill-importer/Dockerfile
-            image_suffix: -email-bill-importer
-            cache_scope: email-bill-importer
 
     steps:
       - name: Checkout
@@ -54,7 +38,7 @@ jobs:
         id: meta
         uses: docker/metadata-action@v6
         with:
-          images: ghcr.io/${{ github.repository }}${{ matrix.image_suffix }}
+          images: ghcr.io/${{ github.repository }}
           tags: |
             type=ref,event=branch
             type=sha
@@ -63,11 +47,11 @@ jobs:
       - name: Build and push
         uses: docker/build-push-action@v7
         with:
-          context: ${{ matrix.context }}
-          file: ${{ matrix.file }}
+          context: .
+          file: ./Dockerfile
           platforms: linux/amd64,linux/arm64
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha,scope=${{ matrix.cache_scope }}
-          cache-to: type=gha,mode=max,scope=${{ matrix.cache_scope }}
+          cache-from: type=gha,scope=ezbookkeeping
+          cache-to: type=gha,mode=max,scope=ezbookkeeping
