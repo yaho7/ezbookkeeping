@@ -141,6 +141,10 @@ node_modules/
 # Node.js Build Target
 dist/
 
+# Python cache files
+__pycache__/
+*.py[cod]
+
 # Visual Studio Code
 .vscode/
 *.code-workspace
