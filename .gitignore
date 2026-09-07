@@ -151,6 +151,7 @@ dist/
 # Codex
 .codex
 .planning
+.worktrees/
 
 # Binary and build files
 ezbookkeeping
