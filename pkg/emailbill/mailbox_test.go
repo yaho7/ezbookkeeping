@@ -1,0 +1,61 @@
+package emailbill
+
+import (
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
+
+func TestDecodeMessageExtractsMultipartTextAndAuthenticatesBank(t *testing.T) {
+	raw := strings.Join([]string{
+		"From: =?UTF-8?B?5oub5ZWG6ZO26KGM?= <95555@message.cmbchina.com>",
+		"Subject: =?UTF-8?B?5oub5ZWG6ZO26KGM6YCa55+l?=",
+		"Message-ID: <bill-1@example.com>",
+		"Date: Mon, 7 Sep 2026 09:00:00 +0800",
+		"Authentication-Results: mx.qq.com; dkim=pass header.d=message.cmbchina.com; spf=pass smtp.mailfrom=95555@message.cmbchina.com",
+		"Content-Type: multipart/alternative; boundary=mail-boundary",
+		"",
+		"--mail-boundary",
+		"Content-Type: text/plain; charset=utf-8",
+		"Content-Transfer-Encoding: quoted-printable",
+		"",
+		"=E6=82=A8=E7=9A=84=E8=B4=A6=E6=88=B7=E4=BA=8E09=E6=9C=8807=E6=97=A508:30=E5=9C=A8=E6=97=A9=E9=A4=90=E5=BA=97=E6=94=AF=E4=BB=9812.34=E5=85=83=E3=80=82",
+		"--mail-boundary--",
+		"",
+	}, "\r\n")
+
+	message, err := DecodeMessage(strings.NewReader(raw), MessageSecurity{
+		RequireAuthenticationResults: true,
+		TrustedAuthservDomains:       []string{"qq.com"},
+	}, time.Time{})
+
+	require.NoError(t, err)
+	assert.Equal(t, "95555@message.cmbchina.com", message.Sender)
+	assert.Equal(t, "招商银行通知", message.Subject)
+	assert.Contains(t, message.Text, "早餐店支付12.34元")
+	assert.True(t, message.Authenticated)
+	assert.Equal(t, "<bill-1@example.com>", message.Fingerprint)
+}
+
+func TestDecodeMessageRejectsUntrustedAuthenticationResults(t *testing.T) {
+	raw := strings.Join([]string{
+		"From: 95555@message.cmbchina.com",
+		"Subject: 招商银行通知",
+		"Authentication-Results: mx.qq.com.evil.example; dkim=pass header.d=message.cmbchina.com",
+		"Content-Type: text/plain; charset=utf-8",
+		"",
+		"test",
+		"",
+	}, "\r\n")
+
+	message, err := DecodeMessage(strings.NewReader(raw), MessageSecurity{
+		RequireAuthenticationResults: true,
+		TrustedAuthservDomains:       []string{"qq.com"},
+	}, time.Now())
+
+	require.NoError(t, err)
+	assert.False(t, message.Authenticated)
+}

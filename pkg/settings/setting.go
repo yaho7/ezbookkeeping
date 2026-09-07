@@ -208,6 +208,10 @@ const (
 
 	defaultImportFileMaxSize uint32 = 10485760 // 10MB
 
+	defaultEmailBillIMAPPort        uint16 = 993
+	defaultEmailBillIntervalSeconds uint32 = 3600
+	defaultEmailBillMaxEmails       uint32 = 60
+
 	defaultExchangeRatesDataRequestTimeout uint32 = 10000 // 10 seconds
 )
 
@@ -235,6 +239,26 @@ type SMTPConfig struct {
 	SMTPPasswd        string
 	SMTPSkipTLSVerify bool
 	FromAddress       string
+}
+
+// EmailBillConfig represents the built-in email bill importer configuration.
+type EmailBillConfig struct {
+	Enabled                      bool
+	TargetUser                   string
+	IMAPServer                   string
+	IMAPPort                     uint16
+	MailUser                     string
+	MailPassword                 string
+	CMBCreditAccountID           int64
+	CMBDebitAccountID            int64
+	ExpenseCategoryID            int64
+	IncomeCategoryID             int64
+	Timezone                     string
+	IntervalSeconds              uint32
+	IntervalDuration             time.Duration
+	MaxEmails                    uint32
+	RequireAuthenticationResults bool
+	TrustedAuthservDomains       []string
 }
 
 // MinIOConfig represents the MinIO setting config
@@ -337,6 +361,9 @@ type Config struct {
 	// Mail
 	EnableSMTP bool
 	SMTPConfig *SMTPConfig
+
+	// Email bill importer
+	EmailBillConfig *EmailBillConfig
 
 	// Log
 	LogModes         []string
@@ -571,6 +598,12 @@ func LoadConfiguration(configFilePath string) (*Config, error) {
 	}
 
 	err = loadCronConfiguration(config, cfgFile, "cron")
+
+	if err != nil {
+		return nil, err
+	}
+
+	err = loadEmailBillConfiguration(config, cfgFile, "email_bill")
 
 	if err != nil {
 		return nil, err
@@ -1021,6 +1054,121 @@ func loadCronConfiguration(config *Config, configFile *ini.File, sectionName str
 	config.EnableCreateScheduledTransaction = getConfigItemBoolValue(configFile, sectionName, "enable_create_scheduled_transaction", false)
 
 	return nil
+}
+
+func loadEmailBillConfiguration(config *Config, configFile *ini.File, sectionName string) error {
+	emailBillConfig := &EmailBillConfig{
+		Enabled:                      getConfigItemBoolValue(configFile, sectionName, "enabled", false),
+		TargetUser:                   strings.TrimSpace(getConfigItemStringValue(configFile, sectionName, "target_user")),
+		IMAPServer:                   strings.TrimSpace(getConfigItemStringValue(configFile, sectionName, "imap_server")),
+		IMAPPort:                     getConfigItemUint16Value(configFile, sectionName, "imap_port", defaultEmailBillIMAPPort),
+		MailUser:                     strings.TrimSpace(getConfigItemStringValue(configFile, sectionName, "mail_user")),
+		MailPassword:                 getConfigItemStringValue(configFile, sectionName, "mail_password"),
+		Timezone:                     getConfigItemStringValue(configFile, sectionName, "timezone", "Asia/Shanghai"),
+		IntervalSeconds:              getConfigItemUint32Value(configFile, sectionName, "interval_seconds", defaultEmailBillIntervalSeconds),
+		MaxEmails:                    getConfigItemUint32Value(configFile, sectionName, "max_emails", defaultEmailBillMaxEmails),
+		RequireAuthenticationResults: getConfigItemBoolValue(configFile, sectionName, "require_authentication_results", true),
+	}
+	config.EmailBillConfig = emailBillConfig
+
+	if !emailBillConfig.Enabled {
+		return nil
+	}
+
+	requiredStrings := []struct {
+		name  string
+		value string
+	}{
+		{name: "target_user", value: emailBillConfig.TargetUser},
+		{name: "mail_user", value: emailBillConfig.MailUser},
+		{name: "mail_password", value: emailBillConfig.MailPassword},
+	}
+	for _, required := range requiredStrings {
+		if required.value == "" {
+			return fmt.Errorf("email bill configuration %s is required", required.name)
+		}
+	}
+
+	mailDomain := emailDomain(emailBillConfig.MailUser)
+	if emailBillConfig.IMAPServer == "" {
+		emailBillConfig.IMAPServer = defaultIMAPServer(mailDomain)
+		if emailBillConfig.IMAPServer == "" {
+			return fmt.Errorf("email bill configuration imap_server is required for %s", mailDomain)
+		}
+	}
+
+	var err error
+	emailBillConfig.CMBCreditAccountID, err = getRequiredConfigItemInt64Value(configFile, sectionName, "cmb_credit_account_id")
+	if err != nil {
+		return err
+	}
+	emailBillConfig.CMBDebitAccountID, err = getRequiredConfigItemInt64Value(configFile, sectionName, "cmb_debit_account_id")
+	if err != nil {
+		return err
+	}
+	emailBillConfig.ExpenseCategoryID, err = getRequiredConfigItemInt64Value(configFile, sectionName, "expense_category_id")
+	if err != nil {
+		return err
+	}
+	emailBillConfig.IncomeCategoryID, err = getRequiredConfigItemInt64Value(configFile, sectionName, "income_category_id")
+	if err != nil {
+		return err
+	}
+
+	if emailBillConfig.IntervalSeconds < 60 {
+		return fmt.Errorf("email bill configuration interval_seconds must be at least 60")
+	}
+	if emailBillConfig.MaxEmails < 1 {
+		return fmt.Errorf("email bill configuration max_emails must be at least 1")
+	}
+	if _, err = time.LoadLocation(emailBillConfig.Timezone); err != nil {
+		return fmt.Errorf("invalid email bill timezone %q: %w", emailBillConfig.Timezone, err)
+	}
+	emailBillConfig.IntervalDuration = time.Duration(emailBillConfig.IntervalSeconds) * time.Second
+
+	trustedDomains := getConfigItemStringValue(configFile, sectionName, "trusted_authserv_domains", mailDomain)
+	for _, domain := range strings.Split(trustedDomains, ",") {
+		domain = strings.ToLower(strings.TrimSpace(domain))
+		if domain != "" {
+			emailBillConfig.TrustedAuthservDomains = append(emailBillConfig.TrustedAuthservDomains, domain)
+		}
+	}
+	if emailBillConfig.RequireAuthenticationResults && len(emailBillConfig.TrustedAuthservDomains) == 0 {
+		return fmt.Errorf("email bill configuration trusted_authserv_domains is required")
+	}
+
+	return nil
+}
+
+func getRequiredConfigItemInt64Value(configFile *ini.File, sectionName string, itemName string) (int64, error) {
+	value := strings.TrimSpace(getConfigItemStringValue(configFile, sectionName, itemName))
+	parsed, err := strconv.ParseInt(value, 10, 64)
+	if err != nil || parsed < 1 {
+		return 0, fmt.Errorf("email bill configuration %s must be a positive integer", itemName)
+	}
+	return parsed, nil
+}
+
+func emailDomain(address string) string {
+	parts := strings.Split(strings.ToLower(strings.TrimSpace(address)), "@")
+	if len(parts) != 2 {
+		return ""
+	}
+	return parts[1]
+}
+
+func defaultIMAPServer(domain string) string {
+	servers := map[string]string{
+		"qq.com":      "imap.qq.com",
+		"foxmail.com": "imap.qq.com",
+		"163.com":     "imap.163.com",
+		"126.com":     "imap.126.com",
+		"yeah.net":    "imap.yeah.net",
+		"gmail.com":   "imap.gmail.com",
+		"outlook.com": "outlook.office365.com",
+		"hotmail.com": "outlook.office365.com",
+	}
+	return servers[domain]
 }
 
 func loadSecurityConfiguration(config *Config, configFile *ini.File, sectionName string) error {
