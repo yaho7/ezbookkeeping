@@ -35,16 +35,33 @@ type emailBillTransactionService interface {
 
 type emailBillMailboxFactory func(*settings.EmailBillConfig, []emailbill.Parser) emailbill.Mailbox
 
+type emailBillAutomationRules interface {
+	RunnableParserRules(core.Context, int64) ([]emailbill.RunnableParserRule, error)
+}
+
+type emailBillPipelineProcessor interface {
+	ProcessMessage(core.Context, int64, int64, EmailBillFetchedMessage, []emailbill.RunnableParserRule) (*EmailBillPipelineResult, error)
+}
+
 // EmailBillImportService imports supported email notifications into native transactions.
 type EmailBillImportService struct {
 	configProvider emailBillConfigProvider
 	users          emailBillUserService
 	transactions   emailBillTransactionService
 	mailboxFactory emailBillMailboxFactory
+	automation     emailBillAutomationRules
+	pipeline       emailBillPipelineProcessor
 }
 
 // EmailBillImporter is the built-in email bill importer service.
-var EmailBillImporter = NewEmailBillImportService(settings.Container, Users, Transactions, newEmailBillMailbox)
+var EmailBillImporter = newConfiguredEmailBillImportService()
+
+func newConfiguredEmailBillImportService() *EmailBillImportService {
+	service := NewEmailBillImportService(settings.Container, Users, Transactions, newEmailBillMailbox)
+	service.automation = EmailBillAutomation
+	service.pipeline = NewEmailBillPipeline(EmailBillAutomationStore, emailbill.NewScriptParser(emailbill.ScriptLimits{}))
+	return service
+}
 
 // NewEmailBillImportService creates an email bill importer with injectable dependencies.
 func NewEmailBillImportService(configProvider emailBillConfigProvider, users emailBillUserService, transactions emailBillTransactionService, mailboxFactory emailBillMailboxFactory) *EmailBillImportService {
@@ -71,6 +88,9 @@ func (s *EmailBillImportService) Import(c core.Context) error {
 	location, err := time.LoadLocation(emailConfig.Timezone)
 	if err != nil {
 		return fmt.Errorf("load email bill timezone: %w", err)
+	}
+	if s.automation != nil && s.pipeline != nil {
+		return s.importWithAutomation(c, user.Uid, emailConfig)
 	}
 
 	parsers := []emailbill.Parser{emailbill.NewCMBCreditParser(), emailbill.NewCMBDebitParser()}
@@ -109,6 +129,28 @@ func (s *EmailBillImportService) Import(c core.Context) error {
 				log.Infof(c, "[email_bill_importer.Import] created transaction %d from %s email", transaction.TransactionId, item.Source)
 			}
 			break
+		}
+	}
+	return nil
+}
+
+func (s *EmailBillImportService) importWithAutomation(c core.Context, uid int64, config *settings.EmailBillConfig) error {
+	rules, err := s.automation.RunnableParserRules(c, uid)
+	if err != nil {
+		return fmt.Errorf("load email bill parser rules: %w", err)
+	}
+	messages, err := s.mailboxFactory(config, nil).FetchRecent(c)
+	if err != nil {
+		return err
+	}
+	for _, message := range messages {
+		_, err = s.pipeline.ProcessMessage(c, uid, uid, EmailBillFetchedMessage{
+			RemoteMessageID: message.MessageID, Sender: message.Sender, Subject: message.Subject,
+			ReceivedAt: message.ReceivedAt, Text: message.Text, Headers: message.Headers,
+			Authenticated: message.Authenticated,
+		}, rules)
+		if err != nil {
+			return fmt.Errorf("process email bill %q: %w", message.Fingerprint, err)
 		}
 	}
 	return nil
