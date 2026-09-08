@@ -371,6 +371,16 @@ func startWebServer(c *core.CliContext) error {
 			apiV1Route.GET("/users/settings/email_bill/get.json", bindApi(api.EmailBillSettings.GetHandler, config))
 			apiV1Route.POST("/users/settings/email_bill/update.json", bindApi(api.EmailBillSettings.UpdateHandler, config))
 			apiV1Route.POST("/users/settings/email_bill/run.json", bindApi(api.EmailBillSettings.RunHandler, config))
+			apiV1Route.GET("/email_bill/parsers/list.json", bindApi(api.EmailBillAutomation.ParserRuleListHandler, config))
+			apiV1Route.POST("/email_bill/parsers/save.json", bindApi(api.EmailBillAutomation.ParserRuleSaveHandler, config))
+			apiV1Route.POST("/email_bill/parsers/disable.json", bindApi(api.EmailBillAutomation.ParserRuleDisableHandler, config))
+			apiV1Route.POST("/email_bill/parsers/test.json", bindApi(api.EmailBillAutomation.ParserTestHandler, config))
+			apiV1Route.GET("/email_bill/routes/list.json", bindApi(api.EmailBillAutomation.RoutingRuleListHandler, config))
+			apiV1Route.POST("/email_bill/routes/save.json", bindApi(api.EmailBillAutomation.RoutingRuleSaveHandler, config))
+			apiV1Route.POST("/email_bill/routes/disable.json", bindApi(api.EmailBillAutomation.RoutingRuleDisableHandler, config))
+			apiV1Route.GET("/email_bill/classification/list.json", bindApi(api.EmailBillAutomation.ClassificationRuleListHandler, config))
+			apiV1Route.POST("/email_bill/classification/save.json", bindApi(api.EmailBillAutomation.ClassificationRuleSaveHandler, config))
+			apiV1Route.POST("/email_bill/classification/disable.json", bindApi(api.EmailBillAutomation.ClassificationRuleDisableHandler, config))
 
 			// Two-Factor Authorization
 			if config.EnableTwoFactor {

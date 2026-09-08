@@ -207,7 +207,7 @@ type EmailBillAccountRoutingRuleVersion struct {
 	RoutingRuleId        int64  `xorm:"UNIQUE(UNQ_email_bill_routing_version) INDEX NOT NULL"`
 	Version              int32  `xorm:"UNIQUE(UNQ_email_bill_routing_version) NOT NULL"`
 	ConditionsJson       string `xorm:"TEXT NOT NULL"`
-	RuleSignature        string `xorm:"UNIQUE(UNQ_email_bill_routing_signature) VARCHAR(80) NOT NULL"`
+	RuleSignature        string `xorm:"INDEX VARCHAR(80) NOT NULL"`
 	TargetAccountId      int64  `xorm:"INDEX NOT NULL"`
 	CreatedUnixTime      int64
 }
@@ -246,7 +246,7 @@ type EmailBillClassificationRuleVersion struct {
 	MerchantPattern             string `xorm:"TEXT NOT NULL"`
 	MatchType                   string `xorm:"VARCHAR(16) NOT NULL"`
 	ScopeJson                   string `xorm:"TEXT NOT NULL"`
-	RuleSignature               string `xorm:"UNIQUE(UNQ_email_bill_classification_signature) VARCHAR(80) NOT NULL"`
+	RuleSignature               string `xorm:"INDEX VARCHAR(80) NOT NULL"`
 	CategoryId                  int64  `xorm:"INDEX NOT NULL"`
 	Confidence                  float64
 	CreatedUnixTime             int64
