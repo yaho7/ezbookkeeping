@@ -26,6 +26,16 @@ if [ -z "${EBK_STORAGE_LOCAL_FILESYSTEM_PATH:-}" ]; then
     export EBK_STORAGE_LOCAL_FILESYSTEM_PATH="${data_path}/storage"
 fi
 
+if [ "$(id -u)" -eq 0 ]; then
+    chown -R 1000:1000 "${data_path}"
+
+    if [ $# -gt 0 ]; then
+        exec su-exec 1000:1000 "$@"
+    else
+        exec su-exec 1000:1000 /ezbookkeeping/ezbookkeeping server run "--conf-path=${EBK_CONF_PATH}"
+    fi
+fi
+
 if [ $# -gt 0 ]; then
     exec "$@"
 else
