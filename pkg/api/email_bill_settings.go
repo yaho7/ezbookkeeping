@@ -14,18 +14,14 @@ import (
 
 // EmailBillSettingsApi manages the built-in email bill importer for its owning user.
 type EmailBillSettingsApi struct {
-	container  *settings.ConfigContainer
-	users      *services.UserService
-	accounts   *services.AccountService
-	categories *services.TransactionCategoryService
+	container *settings.ConfigContainer
+	users     *services.UserService
 }
 
 // EmailBillSettings is the email bill settings api singleton.
 var EmailBillSettings = &EmailBillSettingsApi{
-	container:  settings.Container,
-	users:      services.Users,
-	accounts:   services.Accounts,
-	categories: services.TransactionCategories,
+	container: settings.Container,
+	users:     services.Users,
 }
 
 // GetHandler returns email bill settings without exposing the mailbox password.
@@ -71,12 +67,6 @@ func (a *EmailBillSettingsApi) UpdateHandler(c *core.WebContext) (any, *errs.Err
 		log.Warnf(c, "[email_bill_settings.UpdateHandler] invalid settings for user \"uid:%d\", because %s", uid, err.Error())
 		return false, errs.NewIncompleteOrIncorrectSubmissionError(err)
 	}
-	if emailConfig.Enabled {
-		if err = a.validateMappings(c, uid, emailConfig); err != nil {
-			return false, errs.Or(err, errs.ErrOperationFailed)
-		}
-	}
-
 	if err = settings.SaveEmailBillConfiguration(currentConfig.ConfigFilePath, emailConfig); err != nil {
 		log.Errorf(c, "[email_bill_settings.UpdateHandler] failed to persist settings, because %s", err.Error())
 		return false, errs.ErrOperationFailed
@@ -107,29 +97,6 @@ func (a *EmailBillSettingsApi) RunHandler(c *core.WebContext) (any, *errs.Error)
 	return true, nil
 }
 
-func (a *EmailBillSettingsApi) validateMappings(c core.Context, uid int64, config *settings.EmailBillConfig) error {
-	for _, accountID := range []int64{config.CMBCreditAccountID, config.CMBDebitAccountID} {
-		if _, err := a.accounts.GetAccountByAccountId(c, uid, accountID); err != nil {
-			return err
-		}
-	}
-	expenseCategory, err := a.categories.GetCategoryByCategoryId(c, uid, config.ExpenseCategoryID)
-	if err != nil {
-		return err
-	}
-	if expenseCategory.Type != models.CATEGORY_TYPE_EXPENSE {
-		return errs.ErrTransactionCategoryNotFound
-	}
-	incomeCategory, err := a.categories.GetCategoryByCategoryId(c, uid, config.IncomeCategoryID)
-	if err != nil {
-		return err
-	}
-	if incomeCategory.Type != models.CATEGORY_TYPE_INCOME {
-		return errs.ErrTransactionCategoryNotFound
-	}
-	return nil
-}
-
 func buildEmailBillConfig(username string, request *models.EmailBillSettingsUpdateRequest, current *settings.EmailBillConfig) (*settings.EmailBillConfig, error) {
 	password := strings.TrimSpace(request.MailPassword)
 	maxMessageBytes := uint32(2 * 1024 * 1024)
@@ -149,10 +116,6 @@ func buildEmailBillConfig(username string, request *models.EmailBillSettingsUpda
 		IMAPPort:                     request.IMAPPort,
 		MailUser:                     request.MailUser,
 		MailPassword:                 password,
-		CMBCreditAccountID:           request.CMBCreditAccountID,
-		CMBDebitAccountID:            request.CMBDebitAccountID,
-		ExpenseCategoryID:            request.ExpenseCategoryID,
-		IncomeCategoryID:             request.IncomeCategoryID,
 		Timezone:                     request.Timezone,
 		CronExpression:               request.CronExpression,
 		MaxEmails:                    request.MaxEmails,
@@ -170,10 +133,6 @@ func emailBillSettingsResponse(config *settings.EmailBillConfig) *models.EmailBi
 		IMAPPort:                     config.IMAPPort,
 		MailUser:                     config.MailUser,
 		PasswordConfigured:           config.MailPassword != "",
-		CMBCreditAccountID:           config.CMBCreditAccountID,
-		CMBDebitAccountID:            config.CMBDebitAccountID,
-		ExpenseCategoryID:            config.ExpenseCategoryID,
-		IncomeCategoryID:             config.IncomeCategoryID,
 		Timezone:                     config.Timezone,
 		CronExpression:               config.CronExpression,
 		MaxEmails:                    config.MaxEmails,

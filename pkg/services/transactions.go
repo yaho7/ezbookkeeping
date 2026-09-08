@@ -587,6 +587,22 @@ func (s *TransactionService) CreateEmailBillTransaction(c core.Context, transact
 	return s.createTransaction(c, transaction, nil, nil, false)
 }
 
+// createEmailBillTransactionInSession creates a native transaction inside the
+// caller's transaction so the email import intent can be bound atomically.
+func (s *TransactionService) createEmailBillTransactionInSession(c core.Context, database *datastore.Database, sess *xorm.Session, transaction *models.Transaction) error {
+	transactionIDs := s.GenerateUuids(uuid.UUID_TYPE_TRANSACTION, 1)
+	if len(transactionIDs) != 1 {
+		return errs.ErrSystemIsBusy
+	}
+	now := time.Now().Unix()
+	transaction.TransactionId = transactionIDs[0]
+	transaction.CreatedUnixTime = now
+	transaction.UpdatedUnixTime = now
+	return s.doCreateTransaction(c, database, sess, transaction, nil, nil, nil, &models.TransactionPictureInfo{
+		TransactionId: transaction.TransactionId, UpdatedUnixTime: now,
+	}, false)
+}
+
 func (s *TransactionService) createTransaction(c core.Context, transaction *models.Transaction, tagIds []int64, pictureIds []int64, allowTransactionTimeRegeneration bool) error {
 	if transaction.Uid <= 0 {
 		return errs.ErrUserIdInvalid

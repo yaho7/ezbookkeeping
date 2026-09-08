@@ -43,6 +43,10 @@ type emailBillPipelineProcessor interface {
 	ProcessMessage(core.Context, int64, int64, EmailBillFetchedMessage, []emailbill.RunnableParserRule) (*EmailBillPipelineResult, error)
 }
 
+type emailBillCandidateFinalizer interface {
+	FinalizeMessage(core.Context, int64, int64, int64, int64) error
+}
+
 // EmailBillImportService imports supported email notifications into native transactions.
 type EmailBillImportService struct {
 	configProvider emailBillConfigProvider
@@ -51,6 +55,7 @@ type EmailBillImportService struct {
 	mailboxFactory emailBillMailboxFactory
 	automation     emailBillAutomationRules
 	pipeline       emailBillPipelineProcessor
+	finalizer      emailBillCandidateFinalizer
 }
 
 // EmailBillImporter is the built-in email bill importer service.
@@ -60,6 +65,7 @@ func newConfiguredEmailBillImportService() *EmailBillImportService {
 	service := NewEmailBillImportService(settings.Container, Users, Transactions, newEmailBillMailbox)
 	service.automation = EmailBillAutomation
 	service.pipeline = NewEmailBillPipeline(EmailBillAutomationStore, emailbill.NewScriptParser(emailbill.ScriptLimits{}))
+	service.finalizer = NewEmailBillFinalizer()
 	return service
 }
 
@@ -144,13 +150,18 @@ func (s *EmailBillImportService) importWithAutomation(c core.Context, uid int64,
 		return err
 	}
 	for _, message := range messages {
-		_, err = s.pipeline.ProcessMessage(c, uid, uid, EmailBillFetchedMessage{
+		result, processErr := s.pipeline.ProcessMessage(c, uid, uid, EmailBillFetchedMessage{
 			RemoteMessageID: message.MessageID, Sender: message.Sender, Subject: message.Subject,
 			ReceivedAt: message.ReceivedAt, Text: message.Text, Headers: message.Headers,
 			Authenticated: message.Authenticated,
 		}, rules)
-		if err != nil {
-			return fmt.Errorf("process email bill %q: %w", message.Fingerprint, err)
+		if processErr != nil {
+			return fmt.Errorf("process email bill %q: %w", message.Fingerprint, processErr)
+		}
+		if s.finalizer != nil && !result.Duplicate {
+			if err = s.finalizer.FinalizeMessage(c, uid, uid, result.MessageID, result.RunID); err != nil {
+				return fmt.Errorf("finalize email bill %q: %w", message.Fingerprint, err)
+			}
 		}
 	}
 	return nil

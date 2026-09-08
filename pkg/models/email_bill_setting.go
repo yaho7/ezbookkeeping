@@ -7,10 +7,6 @@ type EmailBillSettingsResponse struct {
 	IMAPPort                     uint16   `json:"imapPort"`
 	MailUser                     string   `json:"mailUser"`
 	PasswordConfigured           bool     `json:"passwordConfigured"`
-	CMBCreditAccountID           int64    `json:"cmbCreditAccountId,string"`
-	CMBDebitAccountID            int64    `json:"cmbDebitAccountId,string"`
-	ExpenseCategoryID            int64    `json:"expenseCategoryId,string"`
-	IncomeCategoryID             int64    `json:"incomeCategoryId,string"`
 	Timezone                     string   `json:"timezone"`
 	CronExpression               string   `json:"cronExpression"`
 	MaxEmails                    uint32   `json:"maxEmails"`
@@ -25,10 +21,6 @@ type EmailBillSettingsUpdateRequest struct {
 	IMAPPort                     uint16   `json:"imapPort"`
 	MailUser                     string   `json:"mailUser"`
 	MailPassword                 string   `json:"mailPassword"`
-	CMBCreditAccountID           int64    `json:"cmbCreditAccountId,string"`
-	CMBDebitAccountID            int64    `json:"cmbDebitAccountId,string"`
-	ExpenseCategoryID            int64    `json:"expenseCategoryId,string"`
-	IncomeCategoryID             int64    `json:"incomeCategoryId,string"`
 	Timezone                     string   `json:"timezone"`
 	CronExpression               string   `json:"cronExpression"`
 	MaxEmails                    uint32   `json:"maxEmails"`

@@ -335,7 +335,7 @@ type EmailBillTransactionImportIntent struct {
 	CandidateId       int64  `xorm:"UNIQUE NOT NULL"`
 	IdempotencyKey    string `xorm:"UNIQUE VARCHAR(80) NOT NULL"`
 	Status            string `xorm:"INDEX VARCHAR(24) NOT NULL"`
-	TransactionId     int64  `xorm:"UNIQUE"`
+	TransactionId     int64  `xorm:"INDEX"`
 	CreatedUnixTime   int64
 	CompletedUnixTime int64
 }

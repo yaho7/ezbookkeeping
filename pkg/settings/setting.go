@@ -1162,18 +1162,6 @@ func NormalizeEmailBillConfiguration(emailBillConfig *EmailBillConfig) error {
 	if emailBillConfig.IMAPServer == "" {
 		return fmt.Errorf("email bill configuration imap_server is required for %s", mailDomain)
 	}
-	if emailBillConfig.CMBCreditAccountID <= 0 {
-		return fmt.Errorf("email bill configuration cmb_credit_account_id must be a positive integer")
-	}
-	if emailBillConfig.CMBDebitAccountID <= 0 {
-		return fmt.Errorf("email bill configuration cmb_debit_account_id must be a positive integer")
-	}
-	if emailBillConfig.ExpenseCategoryID <= 0 {
-		return fmt.Errorf("email bill configuration expense_category_id must be a positive integer")
-	}
-	if emailBillConfig.IncomeCategoryID <= 0 {
-		return fmt.Errorf("email bill configuration income_category_id must be a positive integer")
-	}
 	if emailBillConfig.MaxEmails < 1 {
 		return fmt.Errorf("email bill configuration max_emails must be at least 1")
 	}

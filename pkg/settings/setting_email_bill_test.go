@@ -146,3 +146,14 @@ mail_user = alice@example.com
 
 	require.ErrorContains(t, err, "target_user")
 }
+
+func TestNormalizeEmailBillConfigurationDoesNotRequireFixedMappings(t *testing.T) {
+	config := &EmailBillConfig{
+		Enabled: true, TargetUser: "alice", IMAPServer: "imap.example.com", IMAPPort: 993,
+		MailUser: "alice@example.com", MailPassword: "secret", Timezone: "Asia/Shanghai",
+		CronExpression: "30 8 * * 1-5", MaxEmails: 60, MaxMessageBytes: 2 * 1024 * 1024,
+		RequireAuthenticationResults: true, TrustedAuthservDomains: []string{"example.com"},
+	}
+
+	assert.NoError(t, NormalizeEmailBillConfiguration(config))
+}

@@ -28,10 +28,6 @@ func SaveEmailBillConfiguration(configFilePath string, config *EmailBillConfig) 
 		"imap_port":                      strconv.FormatUint(uint64(config.IMAPPort), 10),
 		"mail_user":                      config.MailUser,
 		"mail_password":                  config.MailPassword,
-		"cmb_credit_account_id":          strconv.FormatInt(config.CMBCreditAccountID, 10),
-		"cmb_debit_account_id":           strconv.FormatInt(config.CMBDebitAccountID, 10),
-		"expense_category_id":            strconv.FormatInt(config.ExpenseCategoryID, 10),
-		"income_category_id":             strconv.FormatInt(config.IncomeCategoryID, 10),
 		"timezone":                       config.Timezone,
 		"cron_expression":                config.CronExpression,
 		"max_emails":                     strconv.FormatUint(uint64(config.MaxEmails), 10),
@@ -41,6 +37,9 @@ func SaveEmailBillConfiguration(configFilePath string, config *EmailBillConfig) 
 	}
 	for key, value := range values {
 		section.Key(key).SetValue(value)
+	}
+	for _, legacyKey := range []string{"cmb_credit_account_id", "cmb_debit_account_id", "expense_category_id", "income_category_id"} {
+		section.DeleteKey(legacyKey)
 	}
 
 	fileInfo, err := os.Stat(configFilePath)
