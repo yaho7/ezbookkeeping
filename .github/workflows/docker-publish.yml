@@ -45,6 +45,8 @@ jobs:
           platforms: ${{ matrix.platform }}
           push: true
           tags: ghcr.io/${{ github.repository }}:sha-${{ github.sha }}-${{ matrix.suffix }}
+          build-args: |
+            BUILD_PIPELINE=1
           cache-from: type=gha,scope=ezbookkeeping-${{ matrix.suffix }}
           cache-to: type=gha,mode=max,scope=ezbookkeeping-${{ matrix.suffix }}
 
