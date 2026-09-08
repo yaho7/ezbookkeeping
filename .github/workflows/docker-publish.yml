@@ -10,10 +10,18 @@ permissions:
 
 jobs:
   build:
-    name: Build ezBookkeeping
-    runs-on: ubuntu-latest
-    outputs:
-      digest: ${{ steps.build.outputs.digest }}
+    name: Build ezBookkeeping (${{ matrix.platform }})
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: linux/amd64
+            runner: ubuntu-24.04
+            suffix: amd64
+          - platform: linux/arm64
+            runner: ubuntu-24.04-arm
+            suffix: arm64
 
     steps:
       - name: Checkout
@@ -26,36 +34,49 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v4
-
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
 
-      - name: Generate immutable image metadata
-        id: immutable_meta
-        uses: docker/metadata-action@v6
-        with:
-          images: ghcr.io/${{ github.repository }}
-          tags: |
-            type=sha,format=long
-
       - name: Build and push
-        id: build
         uses: docker/build-push-action@v7
         with:
           context: .
           file: ./Dockerfile
-          platforms: linux/amd64,linux/arm64
+          platforms: ${{ matrix.platform }}
           push: true
-          tags: ${{ steps.immutable_meta.outputs.tags }}
-          labels: ${{ steps.immutable_meta.outputs.labels }}
-          cache-from: type=gha,scope=ezbookkeeping
-          cache-to: type=gha,mode=max,scope=ezbookkeeping
+          tags: ghcr.io/${{ github.repository }}:sha-${{ github.sha }}-${{ matrix.suffix }}
+          cache-from: type=gha,scope=ezbookkeeping-${{ matrix.suffix }}
+          cache-to: type=gha,mode=max,scope=ezbookkeeping-${{ matrix.suffix }}
+
+  publish-image:
+    name: Publish multi-architecture image
+    needs: build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Log in to GHCR
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Publish immutable image
+        shell: bash
+        env:
+          IMAGE: ghcr.io/${{ github.repository }}
+        run: |
+          docker buildx imagetools create \
+            --tag "${IMAGE}:sha-${GITHUB_SHA}" \
+            "${IMAGE}:sha-${GITHUB_SHA}-amd64" \
+            "${IMAGE}:sha-${GITHUB_SHA}-arm64"
 
   publish-tags:
     name: Publish current branch tags
-    needs: build
+    needs: publish-image
     if: github.ref_type == 'branch'
     runs-on: ubuntu-latest
     concurrency:
@@ -88,7 +109,7 @@ jobs:
       - name: Publish current branch tags
         shell: bash
         env:
-          SOURCE_IMAGE: ghcr.io/${{ github.repository }}@${{ needs.build.outputs.digest }}
+          SOURCE_IMAGE: ghcr.io/${{ github.repository }}:sha-${{ github.sha }}
           BRANCH_TAGS: ${{ steps.branch_meta.outputs.tags }}
         run: |
           set -euo pipefail

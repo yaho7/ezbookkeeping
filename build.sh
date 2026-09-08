@@ -135,7 +135,7 @@ build_backend() {
 
     if [ "$NO_LINT" = "0" ]; then
         echo "Executing backend lint checking..."
-        go vet -v ./...
+        go vet ./...
 
         if [ "$?" != "0" ]; then
             echo_red "Error: Failed to pass lint checking"
@@ -145,13 +145,11 @@ build_backend() {
 
     if [ "$NO_TEST" = "0" ]; then
         echo "Executing backend unit testing..."
-        go clean -cache
-
         if [ -z "$SKIP_TESTS" ]; then
-            go test ./... -v
+            go test ./...
         else
             echo "(Skip unit test \"$SKIP_TESTS\")"
-            go test ./... -v -skip "$SKIP_TESTS"
+            go test ./... -skip "$SKIP_TESTS"
         fi
 
         if [ "$?" != "0" ]; then
@@ -175,7 +173,7 @@ build_backend() {
 
     echo "Building backend binary file ($RELEASE_TYPE)..."
 
-    CGO_ENABLED=1 go build -a -v -trimpath -ldflags "-w -s $ld_static_link_flags $backend_build_extra_arguments" -o ezbookkeeping ezbookkeeping.go
+    CGO_ENABLED=1 go build -trimpath -ldflags "-w -s $ld_static_link_flags $backend_build_extra_arguments" -o ezbookkeeping ezbookkeeping.go
     chmod +x ezbookkeeping
 }
 
