@@ -181,5 +181,39 @@ func updateAllDatabaseTablesStructure(c *core.CliContext) error {
 
 	log.BootInfof(c, "[database.updateAllDatabaseTablesStructure] insights explorer table maintained successfully")
 
+	err = datastore.Container.UserDataStore.SyncStructs(
+		new(models.EmailBillMailbox),
+		new(models.EmailBillMailboxCredential),
+		new(models.EmailBillInboundMessage),
+		new(models.EmailBillParserRule),
+		new(models.EmailBillParserRuleVersion),
+		new(models.EmailBillImportRun),
+		new(models.EmailBillImportRunEvent),
+		new(models.EmailBillParserRun),
+		new(models.EmailBillParserOutput),
+		new(models.EmailBillCandidate),
+		new(models.EmailBillCandidateVariant),
+		new(models.EmailBillCandidateEvidence),
+		new(models.EmailBillCandidateConflict),
+		new(models.EmailBillCandidateConflictItem),
+		new(models.EmailBillAccountRoutingRule),
+		new(models.EmailBillAccountRoutingRuleVersion),
+		new(models.EmailBillAccountRoutingDecision),
+		new(models.EmailBillClassificationRule),
+		new(models.EmailBillClassificationRuleVersion),
+		new(models.EmailBillLLMClassificationRun),
+		new(models.EmailBillCategoryCreationProposal),
+		new(models.EmailBillCategoryCreationClaim),
+		new(models.EmailBillClassificationDecision),
+		new(models.EmailBillConfirmationAction),
+		new(models.EmailBillTransactionImportIntent),
+		new(models.EmailBillTransactionImportAttempt),
+		new(models.EmailBillAuditEvent),
+	)
+
+	if err != nil {
+		return err
+	}
+
 	return nil
 }
