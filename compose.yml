@@ -5,6 +5,4 @@ services:
     ports:
       - "8080:8080"
     volumes:
-      - ./data:/ezbookkeeping/data
-      - ./storage:/ezbookkeeping/storage
-      - ./conf/ezbookkeeping.ini:/ezbookkeeping/conf/ezbookkeeping.ini:ro
+      - ./data:/data

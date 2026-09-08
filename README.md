@@ -78,7 +78,7 @@ Visit [Docker Hub](https://hub.docker.com/r/mayswind/ezbookkeeping) to see all i
 
 This fork imports supported CMB credit-card and debit-card notification emails directly inside ezBookkeeping. It uses the native configuration, scheduler, database, and transaction service; there is no sidecar importer or second image.
 
-See [Email Bill Importer](docs/email-bill-importer.md) for setup. After editing `conf/ezbookkeeping.ini`, start the single service with:
+See [Email Bill Importer](docs/email-bill-importer.md) for setup. Copy `conf/ezbookkeeping.ini` to `data/ezbookkeeping.ini`, edit it, then start the single service with:
 
     $ docker compose up -d
 

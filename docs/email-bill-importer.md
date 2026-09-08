@@ -9,7 +9,14 @@
 
 ## 配置
 
-先正常启动 ezBookkeeping、创建用户以及对应的招行信用卡账户、储蓄卡账户、支出分类和收入分类。随后编辑 `conf/ezbookkeeping.ini` 的 `[email_bill]`：
+先准备持久化目录和配置文件：
+
+```bash
+mkdir -p data
+cp conf/ezbookkeeping.ini data/ezbookkeeping.ini
+```
+
+正常启动 ezBookkeeping、创建用户以及对应的招行信用卡账户、储蓄卡账户、支出分类和收入分类。随后编辑 `data/ezbookkeeping.ini` 的 `[email_bill]`：
 
 ```ini
 [email_bill]
@@ -54,7 +61,14 @@ sh skills/ezbookkeeping/scripts/ebktools.sh transaction-categories-list
 
 ## 运行
 
-仓库根目录的 Compose 只有一个服务：
+仓库根目录的 Compose 只有一个服务和一个持久化目录映射：
+
+```yaml
+volumes:
+  - ./data:/data
+```
+
+`/data` 中统一保存 `ezbookkeeping.ini`、`ezbookkeeping.db`、`storage/` 和 `log/`。启动命令：
 
 ```bash
 docker compose pull
@@ -77,4 +91,4 @@ docker compose exec ezbookkeeping ./ezbookkeeping cron run --name ImportEmailBil
 
 默认要求收件服务器的首个 `Authentication-Results` 来自 `trusted_authserv_domains`，并且其中招行域名的 SPF 或 DKIM 结果为通过。自建邮箱应明确设置可信认证服务域名；只有确认邮件链路可信但服务商不提供该头时，才考虑关闭 `require_authentication_results`。
 
-数据直接保存在 `./data`，附件保存在 `./storage`。请定期备份这两个目录和 `conf/ezbookkeeping.ini`，不要把含邮箱授权码的配置提交到公开仓库。
+数据库、附件、日志和配置都保存在 `./data`。请备份整个目录，不要把其中含邮箱授权码的 `ezbookkeeping.ini` 提交到公开仓库。
