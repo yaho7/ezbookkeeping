@@ -6,6 +6,16 @@ import type {
     ApplicationCloudSetting
 } from '@/core/setting.ts';
 import type {
+    EmailBillSettings,
+    EmailBillParserRule,
+    EmailBillMessageSample,
+    EmailBillParserPreview,
+    EmailBillRoutingRule,
+    EmailBillClassificationRule,
+    EmailBillCandidate,
+    EmailBillAuditEvent
+} from '@/core/emailBill.ts';
+import type {
     VersionInfo
 } from '@/core/version.ts';
 import type {
@@ -444,6 +454,60 @@ export default {
     },
     disableUserApplicationCloudSettings: (): ApiResponsePromise<boolean> => {
         return axios.post<ApiResponse<boolean>>('v1/users/settings/cloud/disable.json');
+    },
+    getEmailBillSettings: (): ApiResponsePromise<EmailBillSettings> => {
+        return axios.get<ApiResponse<EmailBillSettings>>('v1/users/settings/email_bill/get.json');
+    },
+    updateEmailBillSettings: (req: EmailBillSettings): ApiResponsePromise<EmailBillSettings> => {
+        return axios.post<ApiResponse<EmailBillSettings>>('v1/users/settings/email_bill/update.json', req);
+    },
+    runEmailBillImport: (): ApiResponsePromise<boolean> => {
+        return axios.post<ApiResponse<boolean>>('v1/users/settings/email_bill/run.json');
+    },
+    listEmailBillParsers: (): ApiResponsePromise<EmailBillParserRule[]> => {
+        return axios.get<ApiResponse<EmailBillParserRule[]>>('v1/email_bill/parsers/list.json');
+    },
+    saveEmailBillParser: (req: Partial<EmailBillParserRule>): ApiResponsePromise<EmailBillParserRule> => {
+        return axios.post<ApiResponse<EmailBillParserRule>>('v1/email_bill/parsers/save.json', req);
+    },
+    disableEmailBillParser: (id: string): ApiResponsePromise<boolean> => {
+        return axios.post<ApiResponse<boolean>>('v1/email_bill/parsers/disable.json', { id });
+    },
+    testEmailBillParser: (req: Record<string, unknown>): ApiResponsePromise<EmailBillParserPreview> => {
+        return axios.post<ApiResponse<EmailBillParserPreview>>('v1/email_bill/parsers/test.json', req);
+    },
+    listEmailBillMessages: (): ApiResponsePromise<EmailBillMessageSample[]> => {
+        return axios.get<ApiResponse<EmailBillMessageSample[]>>('v1/email_bill/messages/list.json');
+    },
+    listEmailBillRoutes: (): ApiResponsePromise<EmailBillRoutingRule[]> => {
+        return axios.get<ApiResponse<EmailBillRoutingRule[]>>('v1/email_bill/routes/list.json');
+    },
+    saveEmailBillRoute: (req: Partial<EmailBillRoutingRule>): ApiResponsePromise<EmailBillRoutingRule> => {
+        return axios.post<ApiResponse<EmailBillRoutingRule>>('v1/email_bill/routes/save.json', req);
+    },
+    disableEmailBillRoute: (id: string): ApiResponsePromise<boolean> => {
+        return axios.post<ApiResponse<boolean>>('v1/email_bill/routes/disable.json', { id });
+    },
+    listEmailBillClassifications: (): ApiResponsePromise<EmailBillClassificationRule[]> => {
+        return axios.get<ApiResponse<EmailBillClassificationRule[]>>('v1/email_bill/classification/list.json');
+    },
+    saveEmailBillClassification: (req: Partial<EmailBillClassificationRule>): ApiResponsePromise<EmailBillClassificationRule> => {
+        return axios.post<ApiResponse<EmailBillClassificationRule>>('v1/email_bill/classification/save.json', req);
+    },
+    disableEmailBillClassification: (id: string): ApiResponsePromise<boolean> => {
+        return axios.post<ApiResponse<boolean>>('v1/email_bill/classification/disable.json', { id });
+    },
+    listEmailBillCandidates: (status = ''): ApiResponsePromise<EmailBillCandidate[]> => {
+        return axios.get<ApiResponse<EmailBillCandidate[]>>('v1/email_bill/candidates/list.json' + (status ? `?status=${encodeURIComponent(status)}` : ''));
+    },
+    confirmEmailBillCandidate: (req: Record<string, string>): ApiResponsePromise<{ transactionId: string }> => {
+        return axios.post<ApiResponse<{ transactionId: string }>>('v1/email_bill/candidates/confirm.json', req);
+    },
+    retryEmailBillCandidate: (candidateId: string): ApiResponsePromise<boolean> => {
+        return axios.post<ApiResponse<boolean>>('v1/email_bill/candidates/retry.json', { candidateId });
+    },
+    listEmailBillAudit: (candidateId: string): ApiResponsePromise<EmailBillAuditEvent[]> => {
+        return axios.get<ApiResponse<EmailBillAuditEvent[]>>(`v1/email_bill/audit/list.json?candidate_id=${encodeURIComponent(candidateId)}`);
     },
     get2FAStatus: (): ApiResponsePromise<TwoFactorStatusResponse> => {
         return axios.get<ApiResponse<TwoFactorStatusResponse>>('v1/users/2fa/status.json');

@@ -90,6 +90,38 @@ type emailBillClassificationRuleRequest struct {
 	Confidence      float64 `json:"confidence"`
 }
 
+type emailBillRoutingRuleResponse struct {
+	ID              string `json:"id"`
+	Enabled         bool   `json:"enabled"`
+	Priority        int32  `json:"priority"`
+	VersionID       string `json:"versionId"`
+	Version         int32  `json:"version"`
+	Bank            string `json:"bank"`
+	Kind            string `json:"kind"`
+	Last4           string `json:"last4"`
+	Currency        string `json:"currency"`
+	MailboxID       string `json:"mailboxId"`
+	TargetAccountID string `json:"targetAccountId"`
+	UpdatedUnixTime int64  `json:"updatedUnixTime"`
+}
+
+type emailBillClassificationRuleResponse struct {
+	ID              string  `json:"id"`
+	Origin          string  `json:"origin"`
+	Enabled         bool    `json:"enabled"`
+	Priority        int32   `json:"priority"`
+	VersionID       string  `json:"versionId"`
+	Version         int32   `json:"version"`
+	MerchantPattern string  `json:"merchantPattern"`
+	MatchType       string  `json:"matchType"`
+	Bank            string  `json:"bank"`
+	AccountID       string  `json:"accountId"`
+	FlowType        string  `json:"flowType"`
+	CategoryID      string  `json:"categoryId"`
+	Confidence      float64 `json:"confidence"`
+	UpdatedUnixTime int64   `json:"updatedUnixTime"`
+}
+
 type emailBillCandidateConfirmRequest struct {
 	CandidateID int64 `json:"candidateId,string" binding:"required"`
 	VariantID   int64 `json:"variantId,string" binding:"required"`
@@ -173,7 +205,11 @@ func (a *EmailBillAutomationApi) RoutingRuleListHandler(c *core.WebContext) (any
 	if err != nil {
 		return nil, errs.Or(err, errs.ErrOperationFailed)
 	}
-	return infos, nil
+	responses := make([]*emailBillRoutingRuleResponse, 0, len(infos))
+	for _, info := range infos {
+		responses = append(responses, emailBillRoutingRuleResponseFromInfo(info))
+	}
+	return responses, nil
 }
 
 // RoutingRuleSaveHandler creates or revises an account route.
@@ -190,7 +226,7 @@ func (a *EmailBillAutomationApi) RoutingRuleSaveHandler(c *core.WebContext) (any
 	if err != nil {
 		return nil, errs.NewIncompleteOrIncorrectSubmissionError(err)
 	}
-	return info, nil
+	return emailBillRoutingRuleResponseFromInfo(info), nil
 }
 
 // RoutingRuleDisableHandler disables an account route.
@@ -211,7 +247,11 @@ func (a *EmailBillAutomationApi) ClassificationRuleListHandler(c *core.WebContex
 	if err != nil {
 		return nil, errs.Or(err, errs.ErrOperationFailed)
 	}
-	return infos, nil
+	responses := make([]*emailBillClassificationRuleResponse, 0, len(infos))
+	for _, info := range infos {
+		responses = append(responses, emailBillClassificationRuleResponseFromInfo(info))
+	}
+	return responses, nil
 }
 
 // ClassificationRuleSaveHandler creates or revises a merchant mapping.
@@ -228,7 +268,7 @@ func (a *EmailBillAutomationApi) ClassificationRuleSaveHandler(c *core.WebContex
 	if err != nil {
 		return nil, errs.NewIncompleteOrIncorrectSubmissionError(err)
 	}
-	return info, nil
+	return emailBillClassificationRuleResponseFromInfo(info), nil
 }
 
 // ClassificationRuleDisableHandler disables a manual or learned mapping.
@@ -351,6 +391,27 @@ func emailBillParserRuleResponse(info *services.EmailBillParserRuleInfo) *emailB
 		Enabled: info.Rule.Enabled, Priority: info.Rule.Priority,
 		VersionID: strconv.FormatInt(info.Version.ParserRuleVersionId, 10), Version: info.Version.Version,
 		Matcher: matcher, SourceCode: info.Version.SourceCode, RuntimeVersion: info.Version.RuntimeVersion,
+		UpdatedUnixTime: info.Rule.UpdatedUnixTime,
+	}
+}
+
+func emailBillRoutingRuleResponseFromInfo(info *services.EmailBillRoutingRuleInfo) *emailBillRoutingRuleResponse {
+	return &emailBillRoutingRuleResponse{
+		ID: strconv.FormatInt(info.Rule.RoutingRuleId, 10), Enabled: info.Rule.Enabled, Priority: info.Rule.Priority,
+		VersionID: strconv.FormatInt(info.Version.RoutingRuleVersionId, 10), Version: info.Version.Version,
+		Bank: info.Conditions.Bank, Kind: info.Conditions.Kind, Last4: info.Conditions.Last4, Currency: info.Conditions.Currency,
+		MailboxID: strconv.FormatInt(info.Conditions.MailboxID, 10), TargetAccountID: strconv.FormatInt(info.Version.TargetAccountId, 10),
+		UpdatedUnixTime: info.Rule.UpdatedUnixTime,
+	}
+}
+
+func emailBillClassificationRuleResponseFromInfo(info *services.EmailBillClassificationRuleInfo) *emailBillClassificationRuleResponse {
+	return &emailBillClassificationRuleResponse{
+		ID: strconv.FormatInt(info.Rule.ClassificationRuleId, 10), Origin: info.Rule.Origin, Enabled: info.Rule.Enabled,
+		Priority: info.Rule.Priority, VersionID: strconv.FormatInt(info.Version.ClassificationRuleVersionId, 10), Version: info.Version.Version,
+		MerchantPattern: info.Version.MerchantPattern, MatchType: info.Version.MatchType,
+		Bank: info.Scope.Bank, AccountID: strconv.FormatInt(info.Scope.AccountID, 10), FlowType: info.Scope.FlowType,
+		CategoryID: strconv.FormatInt(info.Version.CategoryId, 10), Confidence: info.Version.Confidence,
 		UpdatedUnixTime: info.Rule.UpdatedUnixTime,
 	}
 }
