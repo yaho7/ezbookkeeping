@@ -79,8 +79,7 @@ func (c *CronJobSchedulerContainer) SyncRunJobNow(jobName string) error {
 		return errs.ErrCronJobNotExistsOrNotEnabled
 	}
 
-	job.doRun()
-	return nil
+	return job.run()
 }
 
 // UpdateEmailBillImportJob replaces the email bill schedule, or removes it when disabled.

@@ -19,6 +19,12 @@ type CronJob struct {
 }
 
 func (j *CronJob) doRun() {
+	_ = j.run()
+}
+
+// run preserves the job outcome for synchronous callers while doRun remains the
+// scheduled task callback.
+func (j *CronJob) run() error {
 	start := time.Now()
 	c := core.NewCronJobContext(j.Name, j.Period.GetInterval())
 
@@ -27,7 +33,7 @@ func (j *CronJob) doRun() {
 
 		if err != nil {
 			log.Warnf(c, "[cron_job.doRun] job \"%s\" cannot get local ipv4 address, because %s", j.Name, err.Error())
-			return
+			return err
 		}
 
 		currentInfo := fmt.Sprintf("ip: %s, startTime: %d", localAddr, time.Now().Unix())
@@ -35,7 +41,7 @@ func (j *CronJob) doRun() {
 
 		if found {
 			log.Warnf(c, "[cron_job.doRun] job \"%s\" is already running (%s)", j.Name, runningInfo)
-			return
+			return fmt.Errorf("cron job %q is already running", j.Name)
 		}
 	}
 
@@ -45,9 +51,10 @@ func (j *CronJob) doRun() {
 
 	if err != nil {
 		log.Errorf(c, "[cron_job.doRun] failed to run job \"%s\", because %s", j.Name, err.Error())
-		return
+		return err
 	}
 
 	cost := now.Sub(start).Nanoseconds() / 1e6
 	log.Infof(c, "[cron_job.doRun] run job \"%s\" successfully, cost %dms", j.Name, cost)
+	return nil
 }

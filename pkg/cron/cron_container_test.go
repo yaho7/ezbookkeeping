@@ -1,6 +1,7 @@
 package cron
 
 import (
+	"errors"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -112,6 +113,28 @@ func TestCronJobSchedulerContainerRegistersEmailBillImporterWhenEnabled(t *testi
 		assert.Equal(t, "CRON_TZ=Asia/Shanghai 30 8 * * 1-5", period.Expression)
 	}
 	assert.Nil(t, scheduler.Shutdown())
+}
+
+func TestCronJobSchedulerContainerSyncRunJobNowReturnsImportFailure(t *testing.T) {
+	container := &CronJobSchedulerContainer{
+		allJobsMap: make(map[string]*CronJob), allGocronJobsMap: make(map[string]gocron.Job),
+	}
+	scheduler, err := gocron.NewScheduler()
+	if !assert.NoError(t, err) {
+		return
+	}
+	container.scheduler = scheduler
+	t.Cleanup(func() { assert.NoError(t, scheduler.Shutdown()) })
+	want := errors.New("fetch IMAP message headers failed")
+	job := &CronJob{
+		Name: "TestSyncImportFailure", Period: CronJobIntervalPeriod{Interval: time.Second},
+		Run: func(c *core.CronContext) error { return want },
+	}
+	if !assert.NoError(t, container.registerIntervalJob(core.NewNullContext(), job)) {
+		return
+	}
+
+	assert.ErrorIs(t, container.SyncRunJobNow(job.Name), want)
 }
 
 func TestCronJobSchedulerContainerUpdatesEmailBillImporter(t *testing.T) {
