@@ -159,7 +159,7 @@ func (s *EmailBillTransactionImporter) markFailed(c core.Context, database *data
 
 func buildNativeEmailBillTransaction(c core.Context, uid, accountID, categoryID int64, bill emailbill.StandardBill, marker string) *models.Transaction {
 	transactionType := models.TRANSACTION_DB_TYPE_EXPENSE
-	if strings.EqualFold(bill.FlowType, "income") {
+	if isEmailBillIncomeFlow(bill.FlowType) {
 		transactionType = models.TRANSACTION_DB_TYPE_INCOME
 	}
 	amount := bill.AmountMinor
@@ -176,6 +176,15 @@ func buildNativeEmailBillTransaction(c core.Context, uid, accountID, categoryID 
 		TransactionTime:   utils.GetMinTransactionTimeFromUnixTime(bill.OccurredAt.Unix()),
 		TimezoneUtcOffset: utils.GetTimezoneOffsetMinutes(bill.OccurredAt.Unix(), bill.OccurredAt.Location()),
 		Amount:            amount, Comment: strings.TrimSpace(comment + " " + marker), CreatedIp: c.ClientIP(),
+	}
+}
+
+func isEmailBillIncomeFlow(flowType string) bool {
+	switch strings.ToLower(strings.TrimSpace(flowType)) {
+	case "income", "refund", "transfer_in":
+		return true
+	default:
+		return false
 	}
 }
 

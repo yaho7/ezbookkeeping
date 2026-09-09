@@ -37,6 +37,7 @@ type EmailBillMessageInput struct {
 	ReceivedAt           time.Time
 	BodyHash             string
 	BodySummary          string
+	BodyContent          string
 	Authenticated        bool
 	AuthenticationDetail string
 }
@@ -109,7 +110,7 @@ func (p *EmailBillPipeline) ProcessMessage(c core.Context, uid, mailboxID int64,
 		UID: uid, MailboxID: mailboxID, RemoteMessageID: fetched.RemoteMessageID,
 		Fingerprint: fingerprint, FingerprintVersion: fingerprintVersion,
 		Sender: fetched.Sender, Subject: fetched.Subject, ReceivedAt: fetched.ReceivedAt,
-		BodyHash: "sha256:" + hex.EncodeToString(bodyDigest[:]), BodySummary: summarizeEmailBody(fetched.Text),
+		BodyHash: "sha256:" + hex.EncodeToString(bodyDigest[:]), BodySummary: summarizeEmailBody(fetched.Text), BodyContent: fetched.Text,
 		Authenticated: fetched.Authenticated, AuthenticationDetail: fetched.AuthenticationDetail,
 	})
 	if err != nil {

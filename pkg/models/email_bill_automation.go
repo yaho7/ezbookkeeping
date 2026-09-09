@@ -33,6 +33,7 @@ type EmailBillInboundMessage struct {
 	ReceivedUnixTime      int64  `xorm:"INDEX NOT NULL"`
 	BodyHash              string `xorm:"VARCHAR(80) NOT NULL"`
 	BodySummary           string `xorm:"TEXT"`
+	BodyContent           string `xorm:"TEXT"`
 	RawMessageRef         string `xorm:"VARCHAR(512)"`
 	AuthenticationStatus  string `xorm:"VARCHAR(24) NOT NULL"`
 	AuthenticationSummary string `xorm:"TEXT"`

@@ -33,3 +33,15 @@ func TestBuildNativeEmailBillTransactionUsesRoutingAndClassification(t *testing.
 	assert.Contains(t, transaction.Comment, "Coffee")
 	assert.Contains(t, transaction.Comment, "[ebk-mail:candidate]")
 }
+
+func TestBuildNativeEmailBillTransactionTreatsPositiveFlowTypesAsIncome(t *testing.T) {
+	for _, flowType := range []string{"income", "refund", "transfer_in"} {
+		t.Run(flowType, func(t *testing.T) {
+			transaction := buildNativeEmailBillTransaction(core.NewNullContext(), 7, 9, 11, emailbill.StandardBill{
+				OccurredAt: time.Unix(1_700_000_000, 0), AmountMinor: 100, FlowType: flowType,
+			}, "[ebk-mail:candidate]")
+
+			assert.Equal(t, models.TRANSACTION_DB_TYPE_INCOME, transaction.Type)
+		})
+	}
+}

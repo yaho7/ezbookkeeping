@@ -46,7 +46,7 @@ func (r *EmailBillAutomationRepository) SaveMessageAndStartRun(c core.Context, i
 		MessageId: r.GenerateUuid(uuid.UUID_TYPE_EMAIL_BILL), Uid: input.UID, MailboxId: input.MailboxID,
 		RemoteMessageId: input.RemoteMessageID, MessageFingerprint: input.Fingerprint,
 		FingerprintVersion: input.FingerprintVersion, Sender: input.Sender, Subject: input.Subject,
-		ReceivedUnixTime: input.ReceivedAt.Unix(), BodyHash: input.BodyHash, BodySummary: input.BodySummary,
+		ReceivedUnixTime: input.ReceivedAt.Unix(), BodyHash: input.BodyHash, BodySummary: input.BodySummary, BodyContent: input.BodyContent,
 		AuthenticationStatus: authenticationStatus(input.Authenticated), AuthenticationSummary: input.AuthenticationDetail,
 		CreatedUnixTime: now,
 	}

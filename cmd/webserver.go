@@ -381,6 +381,11 @@ func startWebServer(c *core.CliContext) error {
 			apiV1Route.GET("/email_bill/classification/list.json", bindApi(api.EmailBillAutomation.ClassificationRuleListHandler, config))
 			apiV1Route.POST("/email_bill/classification/save.json", bindApi(api.EmailBillAutomation.ClassificationRuleSaveHandler, config))
 			apiV1Route.POST("/email_bill/classification/disable.json", bindApi(api.EmailBillAutomation.ClassificationRuleDisableHandler, config))
+			apiV1Route.GET("/email_bill/messages/list.json", bindApi(api.EmailBillAutomation.MessageListHandler, config))
+			apiV1Route.GET("/email_bill/candidates/list.json", bindApi(api.EmailBillAutomation.CandidateListHandler, config))
+			apiV1Route.POST("/email_bill/candidates/confirm.json", bindApi(api.EmailBillAutomation.CandidateConfirmHandler, config))
+			apiV1Route.POST("/email_bill/candidates/retry.json", bindApi(api.EmailBillAutomation.CandidateRetryHandler, config))
+			apiV1Route.GET("/email_bill/audit/list.json", bindApi(api.EmailBillAutomation.AuditListHandler, config))
 
 			// Two-Factor Authorization
 			if config.EnableTwoFactor {

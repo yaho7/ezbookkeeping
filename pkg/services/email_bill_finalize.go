@@ -166,7 +166,12 @@ func (s *EmailBillFinalizer) persistAccountDecision(c core.Context, uid, runID i
 		_, err := sess.ID(candidate.CandidateId).Cols("status", "current_account_decision_id", "updated_unix_time").Update(&models.EmailBillCandidate{
 			Status: status, CurrentAccountDecisionId: model.AccountDecisionId, UpdatedUnixTime: time.Now().Unix(),
 		})
-		return err
+		if err != nil {
+			return err
+		}
+		return EmailBillAutomationStore.insertAuditEvent(sess, uid, candidate.MessageId, candidate.CandidateId, runID, "account_routed", "rule", map[string]any{
+			"decisionId": model.AccountDecisionId, "ruleVersionId": decision.RuleID, "accountId": decision.AccountID, "status": status,
+		})
 	})
 }
 
@@ -189,7 +194,13 @@ func (s *EmailBillFinalizer) persistClassificationDecision(c core.Context, uid, 
 		_, err := sess.ID(candidate.CandidateId).Cols("status", "current_classification_decision_id", "updated_unix_time").Update(&models.EmailBillCandidate{
 			Status: status, CurrentClassificationDecisionId: model.ClassificationDecisionId, UpdatedUnixTime: time.Now().Unix(),
 		})
-		return err
+		if err != nil {
+			return err
+		}
+		return EmailBillAutomationStore.insertAuditEvent(sess, uid, candidate.MessageId, candidate.CandidateId, runID, "category_classified", decision.Source, map[string]any{
+			"decisionId": model.ClassificationDecisionId, "ruleVersionId": decision.RuleVersionID,
+			"llmRunId": llmRunID, "categoryId": decision.CategoryID, "status": status,
+		})
 	})
 }
 
