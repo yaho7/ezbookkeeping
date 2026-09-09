@@ -27,6 +27,16 @@ var EmailBillAutomationStore = &EmailBillAutomationRepository{
 	ServiceUsingUuid: ServiceUsingUuid{container: uuid.Container},
 }
 
+// PurgeRawBodies clears retained message bodies without removing identities or audit evidence.
+func (r *EmailBillAutomationRepository) PurgeRawBodies(c core.Context, uid int64, olderThanUnix int64) error {
+	session := r.UserDataDB(uid).NewSession(c).Where("uid=? AND body_content<>?", uid, "")
+	if olderThanUnix > 0 {
+		session = session.And("received_unix_time<?", olderThanUnix)
+	}
+	_, err := session.Cols("body_content").Update(&models.EmailBillInboundMessage{BodyContent: ""})
+	return err
+}
+
 // SaveMessageAndStartRun atomically claims a message identity and creates its
 // first import run. An existing identity is returned as a duplicate.
 func (r *EmailBillAutomationRepository) SaveMessageAndStartRun(c core.Context, input EmailBillMessageInput) (messageID int64, runID int64, duplicate bool, err error) {

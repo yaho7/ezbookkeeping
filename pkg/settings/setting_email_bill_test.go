@@ -57,6 +57,8 @@ func TestLoadEmailBillConfigurationDisabledByDefault(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, config.EmailBillConfig)
 	assert.False(t, config.EmailBillConfig.Enabled)
+	assert.False(t, config.EmailBillConfig.RetainRawEmails)
+	assert.Equal(t, uint32(30), config.EmailBillConfig.RawEmailRetentionDays)
 }
 
 func TestLoadEmailBillConfigurationInfersIMAPServer(t *testing.T) {

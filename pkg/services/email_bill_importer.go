@@ -47,6 +47,10 @@ type emailBillCandidateFinalizer interface {
 	FinalizeMessage(core.Context, int64, int64, int64, int64) error
 }
 
+type emailBillRawBodyCleaner interface {
+	PurgeRawBodies(core.Context, int64, int64) error
+}
+
 // EmailBillImportService imports supported email notifications into native transactions.
 type EmailBillImportService struct {
 	configProvider emailBillConfigProvider
@@ -56,6 +60,7 @@ type EmailBillImportService struct {
 	automation     emailBillAutomationRules
 	pipeline       emailBillPipelineProcessor
 	finalizer      emailBillCandidateFinalizer
+	rawBodies      emailBillRawBodyCleaner
 }
 
 // EmailBillImporter is the built-in email bill importer service.
@@ -66,6 +71,7 @@ func newConfiguredEmailBillImportService() *EmailBillImportService {
 	service.automation = EmailBillAutomation
 	service.pipeline = NewEmailBillPipeline(EmailBillAutomationStore, emailbill.NewScriptParser(emailbill.ScriptLimits{}))
 	service.finalizer = NewEmailBillFinalizer()
+	service.rawBodies = EmailBillAutomationStore
 	return service
 }
 
@@ -141,6 +147,15 @@ func (s *EmailBillImportService) Import(c core.Context) error {
 }
 
 func (s *EmailBillImportService) importWithAutomation(c core.Context, uid int64, config *settings.EmailBillConfig) error {
+	if s.rawBodies != nil {
+		cutoff := int64(0)
+		if config.RetainRawEmails {
+			cutoff = time.Now().Add(-time.Duration(config.RawEmailRetentionDays) * 24 * time.Hour).Unix()
+		}
+		if err := s.rawBodies.PurgeRawBodies(c, uid, cutoff); err != nil {
+			return fmt.Errorf("purge retained email bodies: %w", err)
+		}
+	}
 	rules, err := s.automation.RunnableParserRules(c, uid)
 	if err != nil {
 		return fmt.Errorf("load email bill parser rules: %w", err)
@@ -154,6 +169,7 @@ func (s *EmailBillImportService) importWithAutomation(c core.Context, uid int64,
 			RemoteMessageID: message.MessageID, Sender: message.Sender, Subject: message.Subject,
 			ReceivedAt: message.ReceivedAt, Text: message.Text, Headers: message.Headers,
 			Authenticated: message.Authenticated,
+			RetainBody:    config.RetainRawEmails,
 		}, rules)
 		if processErr != nil {
 			return fmt.Errorf("process email bill %q: %w", message.Fingerprint, processErr)

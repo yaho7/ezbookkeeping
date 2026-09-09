@@ -19,6 +19,7 @@ type memoryEmailBillPipelineRepository struct {
 	runs       []EmailBillPersistedRun
 	parserRuns []EmailBillPersistedParserRun
 	candidates []emailbill.AggregatedCandidate
+	lastInput  EmailBillMessageInput
 }
 
 func newMemoryEmailBillPipelineRepository() *memoryEmailBillPipelineRepository {
@@ -28,6 +29,7 @@ func newMemoryEmailBillPipelineRepository() *memoryEmailBillPipelineRepository {
 func (r *memoryEmailBillPipelineRepository) SaveMessageAndStartRun(_ core.Context, input EmailBillMessageInput) (int64, int64, bool, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	r.lastInput = input
 	if messageID, exists := r.messages[input.Fingerprint]; exists {
 		return messageID, 0, true, nil
 	}
@@ -38,6 +40,23 @@ func (r *memoryEmailBillPipelineRepository) SaveMessageAndStartRun(_ core.Contex
 	r.messages[input.Fingerprint] = messageID
 	r.runs = append(r.runs, EmailBillPersistedRun{RunID: runID, MessageID: messageID, Status: "running"})
 	return messageID, runID, false, nil
+}
+
+func TestEmailBillPipelineOnlyPersistsRawBodyWhenExplicitlyRequested(t *testing.T) {
+	repository := newMemoryEmailBillPipelineRepository()
+	pipeline := NewEmailBillPipeline(repository, emailbill.NewScriptParser(emailbill.ScriptLimits{}))
+	mail := authenticatedScriptMail()
+
+	_, err := pipeline.ProcessMessage(core.NewNullContext(), 7, 3, mail, nil)
+	require.NoError(t, err)
+	assert.Empty(t, repository.lastInput.BodyContent)
+
+	repository = newMemoryEmailBillPipelineRepository()
+	pipeline = NewEmailBillPipeline(repository, emailbill.NewScriptParser(emailbill.ScriptLimits{}))
+	mail.RetainBody = true
+	_, err = pipeline.ProcessMessage(core.NewNullContext(), 7, 3, mail, nil)
+	require.NoError(t, err)
+	assert.Equal(t, mail.Text, repository.lastInput.BodyContent)
 }
 
 func (r *memoryEmailBillPipelineRepository) SaveParserRun(_ core.Context, run EmailBillPersistedParserRun) ([]EmailBillSavedOutput, error) {
@@ -125,6 +144,14 @@ func TestEmailBillPipelineRejectsUnauthenticatedMailBeforeScripts(t *testing.T) 
 	assert.Equal(t, "rejected", result.Status)
 	assert.Empty(t, repository.parserRuns)
 	assert.Empty(t, repository.candidates)
+}
+
+func TestRetainedEmailBillBodyRequiresExplicitOptIn(t *testing.T) {
+	message := authenticatedScriptMail()
+	assert.Empty(t, retainedEmailBillBody(message))
+
+	message.RetainBody = true
+	assert.Equal(t, message.Text, retainedEmailBillBody(message))
 }
 
 func TestEmailBillOutputEvidenceMatchesExactVariantOnly(t *testing.T) {

@@ -122,6 +122,8 @@ func buildEmailBillConfig(username string, request *models.EmailBillSettingsUpda
 		MaxMessageBytes:              maxMessageBytes,
 		RequireAuthenticationResults: request.RequireAuthenticationResults,
 		TrustedAuthservDomains:       append([]string(nil), request.TrustedAuthservDomains...),
+		RetainRawEmails:              request.RetainRawEmails,
+		RawEmailRetentionDays:        request.RawEmailRetentionDays,
 	}
 	return config, settings.NormalizeEmailBillConfiguration(config)
 }
@@ -138,5 +140,7 @@ func emailBillSettingsResponse(config *settings.EmailBillConfig) *models.EmailBi
 		MaxEmails:                    config.MaxEmails,
 		RequireAuthenticationResults: config.RequireAuthenticationResults,
 		TrustedAuthservDomains:       append([]string(nil), config.TrustedAuthservDomains...),
+		RetainRawEmails:              config.RetainRawEmails,
+		RawEmailRetentionDays:        config.RawEmailRetentionDays,
 	}
 }

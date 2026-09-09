@@ -261,6 +261,8 @@ type EmailBillConfig struct {
 	MaxMessageBytes              uint32
 	RequireAuthenticationResults bool
 	TrustedAuthservDomains       []string
+	RetainRawEmails              bool
+	RawEmailRetentionDays        uint32
 }
 
 // MinIOConfig represents the MinIO setting config
@@ -1072,6 +1074,8 @@ func loadEmailBillConfiguration(config *Config, configFile *ini.File, sectionNam
 		MaxEmails:                    getConfigItemUint32Value(configFile, sectionName, "max_emails", defaultEmailBillMaxEmails),
 		MaxMessageBytes:              getConfigItemUint32Value(configFile, sectionName, "max_message_bytes", defaultEmailBillMaxMessageBytes),
 		RequireAuthenticationResults: getConfigItemBoolValue(configFile, sectionName, "require_authentication_results", true),
+		RetainRawEmails:              getConfigItemBoolValue(configFile, sectionName, "retain_raw_emails", false),
+		RawEmailRetentionDays:        getConfigItemUint32Value(configFile, sectionName, "raw_email_retention_days", 30),
 	}
 	config.EmailBillConfig = emailBillConfig
 
@@ -1129,6 +1133,9 @@ func NormalizeEmailBillConfiguration(emailBillConfig *EmailBillConfig) error {
 	}
 	if emailBillConfig.MaxMessageBytes == 0 {
 		emailBillConfig.MaxMessageBytes = defaultEmailBillMaxMessageBytes
+	}
+	if emailBillConfig.RawEmailRetentionDays == 0 {
+		emailBillConfig.RawEmailRetentionDays = 30
 	}
 
 	mailDomain := emailDomain(emailBillConfig.MailUser)

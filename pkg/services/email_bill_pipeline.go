@@ -21,6 +21,7 @@ type EmailBillFetchedMessage struct {
 	Text                 string
 	Headers              map[string]string
 	Authenticated        bool
+	RetainBody           bool
 	AuthenticationDetail string
 }
 
@@ -110,7 +111,7 @@ func (p *EmailBillPipeline) ProcessMessage(c core.Context, uid, mailboxID int64,
 		UID: uid, MailboxID: mailboxID, RemoteMessageID: fetched.RemoteMessageID,
 		Fingerprint: fingerprint, FingerprintVersion: fingerprintVersion,
 		Sender: fetched.Sender, Subject: fetched.Subject, ReceivedAt: fetched.ReceivedAt,
-		BodyHash: "sha256:" + hex.EncodeToString(bodyDigest[:]), BodySummary: summarizeEmailBody(fetched.Text), BodyContent: fetched.Text,
+		BodyHash: "sha256:" + hex.EncodeToString(bodyDigest[:]), BodySummary: summarizeEmailBody(fetched.Text), BodyContent: retainedEmailBillBody(fetched),
 		Authenticated: fetched.Authenticated, AuthenticationDetail: fetched.AuthenticationDetail,
 	})
 	if err != nil {
@@ -181,6 +182,13 @@ func (p *EmailBillPipeline) ProcessMessage(c core.Context, uid, mailboxID int64,
 	}
 	result.Status = status
 	return result, nil
+}
+
+func retainedEmailBillBody(message EmailBillFetchedMessage) string {
+	if message.RetainBody {
+		return message.Text
+	}
+	return ""
 }
 
 func summarizeEmailBody(body string) string {

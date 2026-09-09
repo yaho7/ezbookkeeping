@@ -34,6 +34,8 @@ func SaveEmailBillConfiguration(configFilePath string, config *EmailBillConfig) 
 		"max_message_bytes":              strconv.FormatUint(uint64(config.MaxMessageBytes), 10),
 		"require_authentication_results": strconv.FormatBool(config.RequireAuthenticationResults),
 		"trusted_authserv_domains":       strings.Join(config.TrustedAuthservDomains, ","),
+		"retain_raw_emails":              strconv.FormatBool(config.RetainRawEmails),
+		"raw_email_retention_days":       strconv.FormatUint(uint64(config.RawEmailRetentionDays), 10),
 	}
 	for key, value := range values {
 		section.Key(key).SetValue(value)

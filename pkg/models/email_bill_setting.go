@@ -12,6 +12,8 @@ type EmailBillSettingsResponse struct {
 	MaxEmails                    uint32   `json:"maxEmails"`
 	RequireAuthenticationResults bool     `json:"requireAuthenticationResults"`
 	TrustedAuthservDomains       []string `json:"trustedAuthservDomains"`
+	RetainRawEmails              bool     `json:"retainRawEmails"`
+	RawEmailRetentionDays        uint32   `json:"rawEmailRetentionDays"`
 }
 
 // EmailBillSettingsUpdateRequest contains editable email bill importer settings.
@@ -26,4 +28,6 @@ type EmailBillSettingsUpdateRequest struct {
 	MaxEmails                    uint32   `json:"maxEmails"`
 	RequireAuthenticationResults bool     `json:"requireAuthenticationResults"`
 	TrustedAuthservDomains       []string `json:"trustedAuthservDomains"`
+	RetainRawEmails              bool     `json:"retainRawEmails"`
+	RawEmailRetentionDays        uint32   `json:"rawEmailRetentionDays"`
 }
