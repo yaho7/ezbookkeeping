@@ -1,6 +1,7 @@
 package api
 
 import (
+	"encoding/json"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -13,15 +14,13 @@ import (
 func TestBuildEmailBillConfigPreservesStoredPassword(t *testing.T) {
 	current := &settings.EmailBillConfig{MailPassword: "stored-password"}
 	request := &models.EmailBillSettingsUpdateRequest{
-		Enabled:                      true,
-		IMAPServer:                   "imap.qq.com",
-		IMAPPort:                     993,
-		MailUser:                     "alice@qq.com",
-		Timezone:                     "Asia/Shanghai",
-		CronExpression:               "30 8 * * 1-5",
-		MaxEmails:                    60,
-		RequireAuthenticationResults: true,
-		TrustedAuthservDomains:       []string{"qq.com"},
+		Enabled:        true,
+		IMAPServer:     "imap.qq.com",
+		IMAPPort:       993,
+		MailUser:       "alice@qq.com",
+		Timezone:       "Asia/Shanghai",
+		CronExpression: "30 8 * * 1-5",
+		MaxEmails:      60,
 	}
 
 	actual, err := buildEmailBillConfig("alice", request, current)
@@ -38,4 +37,12 @@ func TestBuildEmailBillConfigAllowsDisablingWithoutCredentials(t *testing.T) {
 	require.NoError(t, err)
 	assert.False(t, actual.Enabled)
 	assert.Equal(t, "alice", actual.TargetUser)
+}
+
+func TestEmailBillSettingsResponseOmitsAuthenticationOptions(t *testing.T) {
+	raw, err := json.Marshal(emailBillSettingsResponse(&settings.EmailBillConfig{}))
+
+	require.NoError(t, err)
+	assert.NotContains(t, string(raw), "requireAuthenticationResults")
+	assert.NotContains(t, string(raw), "trustedAuthservDomains")
 }

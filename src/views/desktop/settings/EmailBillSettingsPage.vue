@@ -12,7 +12,7 @@
                     <v-btn color="primary" prepend-icon="$play" :loading="running" @click="runNow">{{ tt('Run Now') }}</v-btn>
                 </v-card-title>
                 <v-card-subtitle class="pb-3 text-wrap">
-                    {{ tt('Import authenticated bank emails through independent parsers, routing rules and auditable classification decisions.') }}
+                    {{ tt('Import bank emails through independent parsers, routing rules and auditable classification decisions.') }}
                 </v-card-subtitle>
 
                 <v-tabs v-model="activeTab" color="primary" show-arrows>
@@ -49,13 +49,11 @@
                                 </v-col>
                                 <v-col cols="12" md="4"><v-text-field :label="tt('Timezone')" placeholder="Asia/Shanghai" v-model.trim="settings.timezone" /></v-col>
                                 <v-col cols="12" md="4"><v-text-field type="number" min="1" max="200" :label="tt('Maximum Emails Per Run')" v-model.number="settings.maxEmails" /></v-col>
-                                <v-col cols="12" md="4"><v-switch color="primary" :label="tt('Require Authentication Results')" v-model="settings.requireAuthenticationResults" /></v-col>
-                                <v-col cols="12"><v-combobox multiple chips closable-chips :label="tt('Trusted Authentication Domains')" v-model="settings.trustedAuthservDomains" /></v-col>
                                 <v-col cols="12" md="4"><v-switch color="primary" :label="tt('Retain Raw Emails for Test Bench')" v-model="settings.retainRawEmails" /></v-col>
                                 <v-col cols="12" md="4"><v-text-field type="number" min="1" max="365" :disabled="!settings.retainRawEmails" :label="tt('Raw Email Retention Days')" v-model.number="settings.rawEmailRetentionDays" /></v-col>
                             </v-row>
                         </v-card-text>
-                        <v-card-actions class="px-6 pb-5"><v-spacer /><v-btn color="primary" :loading="saving" @click="saveSettings">{{ tt('Save') }}</v-btn></v-card-actions>
+                        <v-card-actions class="px-6 pb-5"><v-spacer /><v-btn variant="tonal" :loading="testingMailbox" @click="testMailbox">{{ tt('Test Connection') }}</v-btn><v-btn color="primary" :loading="saving" @click="saveSettings">{{ tt('Save') }}</v-btn></v-card-actions>
                     </v-card>
                 </v-window-item>
 
@@ -175,6 +173,7 @@ const loading = ref(false);
 const saving = ref(false);
 const running = ref(false);
 const testing = ref(false);
+const testingMailbox = ref(false);
 const generating = ref(false);
 const parserDialog = ref(false);
 const routeDialog = ref(false);
@@ -193,7 +192,7 @@ const testMessageId = ref<string | null>(null);
 const parserSenders = ref('');
 const parserSubjects = ref('');
 
-const settings = reactive<EmailBillSettings>({ enabled: false, imapServer: '', imapPort: 993, mailUser: '', passwordConfigured: false, timezone: 'Asia/Shanghai', cronExpression: '0 8 * * *', maxEmails: 50, requireAuthenticationResults: true, trustedAuthservDomains: [], retainRawEmails: false, rawEmailRetentionDays: 30 });
+const settings = reactive<EmailBillSettings>({ enabled: false, imapServer: '', imapPort: 993, mailUser: '', passwordConfigured: false, timezone: 'Asia/Shanghai', cronExpression: '0 8 * * *', maxEmails: 50, retainRawEmails: false, rawEmailRetentionDays: 30 });
 const parserDraft = reactive<EmailBillParserRule>(createEmailBillParserRule());
 const routeDraft = reactive<EmailBillRoutingRule>(emptyRoute());
 const classificationDraft = reactive<EmailBillClassificationRule>(emptyClassification());
@@ -229,7 +228,7 @@ async function saveSettings(): Promise<void> {
     saving.value = true;
     try {
         settings.cronExpression = buildSchedule();
-        await store.saveSettings({ ...settings, mailPassword: mailPassword.value || undefined, trustedAuthservDomains: [...settings.trustedAuthservDomains] });
+        await store.saveSettings({ ...settings, mailPassword: mailPassword.value || undefined });
         mailPassword.value = '';
         if (store.settings) Object.assign(settings, store.settings);
         snackbar.value?.showMessage('Data has been updated');
@@ -237,6 +236,7 @@ async function saveSettings(): Promise<void> {
 }
 
 async function runNow(): Promise<void> { running.value = true; try { resultOf(await services.runEmailBillImport()); await store.reloadCandidates(); snackbar.value?.showMessage('Data has been updated'); } catch (error) { showError(error); } finally { running.value = false; } }
+async function testMailbox(): Promise<void> { testingMailbox.value = true; try { resultOf(await services.testEmailBillSettings({ ...settings, mailPassword: mailPassword.value || undefined })); snackbar.value?.showMessage('Connection test succeeded'); } catch (error) { showError(error); } finally { testingMailbox.value = false; } }
 
 function openParser(rule?: EmailBillParserRule): void { Object.assign(parserDraft, rule ? JSON.parse(JSON.stringify(rule)) : createEmailBillParserRule()); parserSenders.value = parserDraft.matcher.senders.join(', '); parserSubjects.value = parserDraft.matcher.subjectContains.join(', '); preview.value = null; parserDialog.value = true; }
 async function saveParser(): Promise<void> { saving.value = true; try { parserDraft.matcher = { senders: splitList(parserSenders.value), subjectContains: splitList(parserSubjects.value) }; await store.saveParser({ ...parserDraft }); parserDialog.value = false; snackbar.value?.showMessage('Data has been updated'); } catch (error) { showError(error); } finally { saving.value = false; } }

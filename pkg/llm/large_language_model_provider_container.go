@@ -73,6 +73,11 @@ func initializeLargeLanguageModelProvider(llmConfig *settings.LLMConfig, enableR
 	return nil, errs.ErrInvalidLLMProvider
 }
 
+// NewLargeLanguageModelProvider creates an isolated provider without changing the global container.
+func NewLargeLanguageModelProvider(llmConfig *settings.LLMConfig, enableResponseLog bool) (provider.LargeLanguageModelProvider, error) {
+	return initializeLargeLanguageModelProvider(llmConfig, enableResponseLog)
+}
+
 // GetJsonResponseByTextRecognitionModel returns the json response from the current large language model provider by transaction text recognition model
 func (l *LargeLanguageModelProviderContainer) GetJsonResponseByTextRecognitionModel(c core.Context, uid int64, currentConfig *settings.Config, request *data.LargeLanguageModelRequest) (*data.LargeLanguageModelTextualResponse, error) {
 	if currentConfig.TextRecognitionLLMConfig == nil || Container.textRecognitionCurrentProvider == nil {

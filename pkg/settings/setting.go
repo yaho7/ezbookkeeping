@@ -245,24 +245,22 @@ type SMTPConfig struct {
 
 // EmailBillConfig represents the built-in email bill importer configuration.
 type EmailBillConfig struct {
-	Enabled                      bool
-	TargetUser                   string
-	IMAPServer                   string
-	IMAPPort                     uint16
-	MailUser                     string
-	MailPassword                 string
-	CMBCreditAccountID           int64
-	CMBDebitAccountID            int64
-	ExpenseCategoryID            int64
-	IncomeCategoryID             int64
-	Timezone                     string
-	CronExpression               string
-	MaxEmails                    uint32
-	MaxMessageBytes              uint32
-	RequireAuthenticationResults bool
-	TrustedAuthservDomains       []string
-	RetainRawEmails              bool
-	RawEmailRetentionDays        uint32
+	Enabled               bool
+	TargetUser            string
+	IMAPServer            string
+	IMAPPort              uint16
+	MailUser              string
+	MailPassword          string
+	CMBCreditAccountID    int64
+	CMBDebitAccountID     int64
+	ExpenseCategoryID     int64
+	IncomeCategoryID      int64
+	Timezone              string
+	CronExpression        string
+	MaxEmails             uint32
+	MaxMessageBytes       uint32
+	RetainRawEmails       bool
+	RawEmailRetentionDays uint32
 }
 
 // MinIOConfig represents the MinIO setting config
@@ -1063,19 +1061,18 @@ func loadCronConfiguration(config *Config, configFile *ini.File, sectionName str
 
 func loadEmailBillConfiguration(config *Config, configFile *ini.File, sectionName string) error {
 	emailBillConfig := &EmailBillConfig{
-		Enabled:                      getConfigItemBoolValue(configFile, sectionName, "enabled", false),
-		TargetUser:                   strings.TrimSpace(getConfigItemStringValue(configFile, sectionName, "target_user")),
-		IMAPServer:                   strings.TrimSpace(getConfigItemStringValue(configFile, sectionName, "imap_server")),
-		IMAPPort:                     getConfigItemUint16Value(configFile, sectionName, "imap_port", defaultEmailBillIMAPPort),
-		MailUser:                     strings.TrimSpace(getConfigItemStringValue(configFile, sectionName, "mail_user")),
-		MailPassword:                 getConfigItemStringValue(configFile, sectionName, "mail_password"),
-		Timezone:                     getConfigItemStringValue(configFile, sectionName, "timezone", "Asia/Shanghai"),
-		CronExpression:               strings.TrimSpace(getConfigItemStringValue(configFile, sectionName, "cron_expression", defaultEmailBillCronExpression)),
-		MaxEmails:                    getConfigItemUint32Value(configFile, sectionName, "max_emails", defaultEmailBillMaxEmails),
-		MaxMessageBytes:              getConfigItemUint32Value(configFile, sectionName, "max_message_bytes", defaultEmailBillMaxMessageBytes),
-		RequireAuthenticationResults: getConfigItemBoolValue(configFile, sectionName, "require_authentication_results", true),
-		RetainRawEmails:              getConfigItemBoolValue(configFile, sectionName, "retain_raw_emails", false),
-		RawEmailRetentionDays:        getConfigItemUint32Value(configFile, sectionName, "raw_email_retention_days", 30),
+		Enabled:               getConfigItemBoolValue(configFile, sectionName, "enabled", false),
+		TargetUser:            strings.TrimSpace(getConfigItemStringValue(configFile, sectionName, "target_user")),
+		IMAPServer:            strings.TrimSpace(getConfigItemStringValue(configFile, sectionName, "imap_server")),
+		IMAPPort:              getConfigItemUint16Value(configFile, sectionName, "imap_port", defaultEmailBillIMAPPort),
+		MailUser:              strings.TrimSpace(getConfigItemStringValue(configFile, sectionName, "mail_user")),
+		MailPassword:          getConfigItemStringValue(configFile, sectionName, "mail_password"),
+		Timezone:              getConfigItemStringValue(configFile, sectionName, "timezone", "Asia/Shanghai"),
+		CronExpression:        strings.TrimSpace(getConfigItemStringValue(configFile, sectionName, "cron_expression", defaultEmailBillCronExpression)),
+		MaxEmails:             getConfigItemUint32Value(configFile, sectionName, "max_emails", defaultEmailBillMaxEmails),
+		MaxMessageBytes:       getConfigItemUint32Value(configFile, sectionName, "max_message_bytes", defaultEmailBillMaxMessageBytes),
+		RetainRawEmails:       getConfigItemBoolValue(configFile, sectionName, "retain_raw_emails", false),
+		RawEmailRetentionDays: getConfigItemUint32Value(configFile, sectionName, "raw_email_retention_days", 30),
 	}
 	config.EmailBillConfig = emailBillConfig
 
@@ -1095,14 +1092,6 @@ func loadEmailBillConfiguration(config *Config, configFile *ini.File, sectionNam
 	emailBillConfig.IncomeCategoryID, err = getOptionalConfigItemInt64Value(configFile, sectionName, "income_category_id")
 	if err != nil {
 		return err
-	}
-
-	trustedDomains := getConfigItemStringValue(configFile, sectionName, "trusted_authserv_domains")
-	for _, domain := range strings.Split(trustedDomains, ",") {
-		domain = strings.ToLower(strings.TrimSpace(domain))
-		if domain != "" {
-			emailBillConfig.TrustedAuthservDomains = append(emailBillConfig.TrustedAuthservDomains, domain)
-		}
 	}
 
 	return NormalizeEmailBillConfiguration(emailBillConfig)
@@ -1142,13 +1131,6 @@ func NormalizeEmailBillConfiguration(emailBillConfig *EmailBillConfig) error {
 	if emailBillConfig.IMAPServer == "" && mailDomain != "" {
 		emailBillConfig.IMAPServer = defaultIMAPServer(mailDomain)
 	}
-	if len(emailBillConfig.TrustedAuthservDomains) == 0 && mailDomain != "" {
-		emailBillConfig.TrustedAuthservDomains = defaultAuthenticationServiceDomains(mailDomain, emailBillConfig.IMAPServer)
-	}
-	for index, domain := range emailBillConfig.TrustedAuthservDomains {
-		emailBillConfig.TrustedAuthservDomains[index] = strings.ToLower(strings.TrimSpace(domain))
-	}
-
 	if !emailBillConfig.Enabled {
 		return nil
 	}
@@ -1185,10 +1167,6 @@ func NormalizeEmailBillConfiguration(emailBillConfig *EmailBillConfig) error {
 		return fmt.Errorf("invalid email bill timezone %q: %w", emailBillConfig.Timezone, err)
 	}
 
-	if emailBillConfig.RequireAuthenticationResults && len(emailBillConfig.TrustedAuthservDomains) == 0 {
-		return fmt.Errorf("email bill configuration trusted_authserv_domains is required")
-	}
-
 	return nil
 }
 
@@ -1203,27 +1181,6 @@ func getOptionalConfigItemInt64Value(configFile *ini.File, sectionName string, i
 		return 0, fmt.Errorf("email bill configuration %s must be a positive integer", itemName)
 	}
 	return numericValue, nil
-}
-
-func defaultAuthenticationServiceDomains(mailDomain string, imapServer string) []string {
-	domains := map[string][]string{
-		"qq.com":      {"qq.com"},
-		"foxmail.com": {"qq.com"},
-		"163.com":     {"163.com"},
-		"126.com":     {"163.com"},
-		"yeah.net":    {"163.com"},
-		"gmail.com":   {"google.com"},
-		"outlook.com": {"outlook.com"},
-		"hotmail.com": {"outlook.com"},
-	}
-	if configured := domains[mailDomain]; len(configured) > 0 {
-		return configured
-	}
-	fallback := strings.TrimSuffix(strings.ToLower(strings.TrimSpace(imapServer)), ".")
-	if fallback == "" {
-		return nil
-	}
-	return []string{fallback}
 }
 
 func getRequiredConfigItemInt64Value(configFile *ini.File, sectionName string, itemName string) (int64, error) {

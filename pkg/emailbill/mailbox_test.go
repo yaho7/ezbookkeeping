@@ -82,6 +82,18 @@ func TestDecodeMessagePreservesSafeHeadersForUserParsers(t *testing.T) {
 	assert.NotContains(t, message.Headers, "authorization")
 }
 
+func TestNewestMessageDatesAppliesBatchLimitAfterFiltering(t *testing.T) {
+	dates := map[uint32]time.Time{
+		1: time.Unix(1, 0), 2: time.Unix(2, 0), 3: time.Unix(3, 0), 4: time.Unix(4, 0),
+	}
+
+	limited := newestMessageDates(dates, 2)
+
+	assert.Len(t, limited, 2)
+	assert.Contains(t, limited, uint32(3))
+	assert.Contains(t, limited, uint32(4))
+}
+
 func TestIMAPMailboxWithoutBuiltInParsersAcceptsMailForUserRules(t *testing.T) {
 	mailbox := NewIMAPMailbox(MailboxConfig{}, nil)
 

@@ -8,8 +8,6 @@ export interface EmailBillSettings {
     timezone: string;
     cronExpression: string;
     maxEmails: number;
-    requireAuthenticationResults: boolean;
-    trustedAuthservDomains: string[];
     retainRawEmails: boolean;
     rawEmailRetentionDays: number;
 }

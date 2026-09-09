@@ -463,11 +463,17 @@ export default {
     updateLLMSettings: (req: LLMSettings): ApiResponsePromise<LLMSettings> => {
         return axios.post<ApiResponse<LLMSettings>>('v1/users/settings/llm/update.json', req);
     },
+    testLLMSettings: (req: LLMSettings): ApiResponsePromise<boolean> => {
+        return axios.post<ApiResponse<boolean>>('v1/users/settings/llm/test.json', req, { timeout: DEFAULT_LLM_API_TIMEOUT });
+    },
     getEmailBillSettings: (): ApiResponsePromise<EmailBillSettings> => {
         return axios.get<ApiResponse<EmailBillSettings>>('v1/users/settings/email_bill/get.json');
     },
     updateEmailBillSettings: (req: EmailBillSettings): ApiResponsePromise<EmailBillSettings> => {
         return axios.post<ApiResponse<EmailBillSettings>>('v1/users/settings/email_bill/update.json', req);
+    },
+    testEmailBillSettings: (req: EmailBillSettings): ApiResponsePromise<boolean> => {
+        return axios.post<ApiResponse<boolean>>('v1/users/settings/email_bill/test.json', req, { timeout: DEFAULT_LLM_API_TIMEOUT });
     },
     runEmailBillImport: (): ApiResponsePromise<boolean> => {
         return axios.post<ApiResponse<boolean>>('v1/users/settings/email_bill/run.json');

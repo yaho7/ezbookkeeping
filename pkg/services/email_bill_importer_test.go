@@ -110,7 +110,9 @@ func TestEmailBillImporterUsesNextDeterministicTimeWhenOccupied(t *testing.T) {
 }
 
 type fakeEmailBillMailbox struct {
-	messages []emailbill.Message
+	messages      []emailbill.Message
+	connectionErr error
+	skipMessage   emailbill.MessageFilter
 }
 
 type fakeEmailBillAutomationRules struct {
@@ -166,6 +168,33 @@ func TestEmailBillImporterUsesConfigurableParserPipeline(t *testing.T) {
 
 func (m *fakeEmailBillMailbox) FetchRecent(context.Context) ([]emailbill.Message, error) {
 	return m.messages, nil
+}
+
+func (m *fakeEmailBillMailbox) TestConnection(context.Context) error { return m.connectionErr }
+
+func (m *fakeEmailBillMailbox) SetMessageFilter(filter emailbill.MessageFilter) {
+	m.skipMessage = filter
+}
+
+func TestEmailBillImporterTestsConnectionWithoutImporting(t *testing.T) {
+	mailbox := &fakeEmailBillMailbox{}
+	service := NewEmailBillImportService(nil, nil, nil, func(*settings.EmailBillConfig, []emailbill.Parser) emailbill.Mailbox { return mailbox })
+
+	err := service.TestConnection(core.NewNullContext(), &settings.EmailBillConfig{
+		IMAPServer: "imap.example.com", IMAPPort: 993, MailUser: "alice@example.com", MailPassword: "secret",
+	})
+
+	require.NoError(t, err)
+}
+
+func TestAutomaticEmailBillSecurityRequiresKnownProvidersOnly(t *testing.T) {
+	known := automaticEmailBillMessageSecurity("alice@qq.com", "imap.qq.com")
+	unknown := automaticEmailBillMessageSecurity("alice@small.example", "mail.small.example")
+
+	assert.True(t, known.RequireAuthenticationResults)
+	assert.Equal(t, []string{"qq.com"}, known.TrustedAuthservDomains)
+	assert.False(t, unknown.RequireAuthenticationResults)
+	assert.Empty(t, unknown.TrustedAuthservDomains)
 }
 
 func TestEmailBillImporterCreatesNativeTransactionOnlyOnce(t *testing.T) {
