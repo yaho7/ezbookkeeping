@@ -39,6 +39,16 @@ func DecodeMessage(reader io.Reader, security MessageSecurity, fallbackTime time
 
 // DecodeMessageWithLimit decodes one RFC 5322 message without reading beyond maxBytes.
 func DecodeMessageWithLimit(reader io.Reader, security MessageSecurity, fallbackTime time.Time, maxBytes uint32) (Message, error) {
+	return decodeMessageWithLimit(reader, security, fallbackTime, maxBytes, false)
+}
+
+// DecodeMessageHeadersWithLimit decodes IMAP header-only responses without trying
+// to parse a MIME body that has not been downloaded yet.
+func DecodeMessageHeadersWithLimit(reader io.Reader, security MessageSecurity, fallbackTime time.Time, maxBytes uint32) (Message, error) {
+	return decodeMessageWithLimit(reader, security, fallbackTime, maxBytes, true)
+}
+
+func decodeMessageWithLimit(reader io.Reader, security MessageSecurity, fallbackTime time.Time, maxBytes uint32, headersOnly bool) (Message, error) {
 	limitedReader := &io.LimitedReader{R: reader, N: int64(maxBytes) + 1}
 	content, err := io.ReadAll(limitedReader)
 	if err != nil {
@@ -47,10 +57,10 @@ func DecodeMessageWithLimit(reader io.Reader, security MessageSecurity, fallback
 	if uint64(len(content)) > uint64(maxBytes) {
 		return Message{}, fmt.Errorf("email message exceeds size limit of %d bytes", maxBytes)
 	}
-	return decodeMessage(bytes.NewReader(content), security, fallbackTime)
+	return decodeMessage(bytes.NewReader(content), security, fallbackTime, headersOnly)
 }
 
-func decodeMessage(reader io.Reader, security MessageSecurity, fallbackTime time.Time) (Message, error) {
+func decodeMessage(reader io.Reader, security MessageSecurity, fallbackTime time.Time, headersOnly bool) (Message, error) {
 	mailMessage, err := mail.ReadMessage(reader)
 	if err != nil {
 		return Message{}, fmt.Errorf("read email message: %w", err)
@@ -69,9 +79,12 @@ func decodeMessage(reader io.Reader, security MessageSecurity, fallbackTime time
 		sender = strings.ToLower(strings.TrimSpace(sender))
 	}
 
-	text, err := decodeMIMEBody(mailMessage.Header, mailMessage.Body)
-	if err != nil {
-		return Message{}, err
+	text := ""
+	if !headersOnly {
+		text, err = decodeMIMEBody(mailMessage.Header, mailMessage.Body)
+		if err != nil {
+			return Message{}, err
+		}
 	}
 
 	receivedAt := fallbackTime

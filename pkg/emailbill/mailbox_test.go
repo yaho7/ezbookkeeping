@@ -127,3 +127,42 @@ func TestDecodeMessageRejectsOversizedBody(t *testing.T) {
 
 	require.ErrorContains(t, err, "size limit")
 }
+
+func TestDecodeMessageHeadersAcceptsMultipartWithoutBody(t *testing.T) {
+	raw := strings.Join([]string{
+		"From: Bank <95555@message.cmbchina.com>",
+		"Subject: =?UTF-8?B?5oub5ZWG6ZO26KGM6YCa55+l?=",
+		"Message-ID: <multipart-bill@example.com>",
+		"Date: Mon, 7 Sep 2026 09:00:00 +0800",
+		"Authentication-Results: mx.qq.com; dkim=pass header.d=message.cmbchina.com",
+		"Content-Type: multipart/alternative; boundary=mail-boundary",
+		"", "",
+	}, "\r\n")
+	security := MessageSecurity{RequireAuthenticationResults: true, TrustedAuthservDomains: []string{"qq.com"}}
+
+	message, err := DecodeMessageHeadersWithLimit(strings.NewReader(raw), security, time.Time{}, DefaultMaxMessageBytes)
+
+	require.NoError(t, err)
+	assert.Equal(t, "95555@message.cmbchina.com", message.Sender)
+	assert.Equal(t, "招商银行通知", message.Subject)
+	assert.Equal(t, "<multipart-bill@example.com>", message.MessageID)
+	assert.Equal(t, "2026-09-07T09:00:00+08:00", message.ReceivedAt.Format(time.RFC3339))
+	assert.True(t, message.Authenticated)
+	assert.Empty(t, message.Text)
+
+	// Full-message decoding must still reject a truncated multipart body.
+	_, err = DecodeMessage(strings.NewReader(raw), security, time.Time{})
+	require.ErrorContains(t, err, "read MIME part")
+}
+
+func TestDecodeMessageHeadersPreservesAuthenticationAndSizeChecks(t *testing.T) {
+	raw := "From: 95555@message.cmbchina.com\r\nSubject: Bill\r\nContent-Type: multipart/alternative; boundary=bill\r\n\r\n"
+	security := MessageSecurity{RequireAuthenticationResults: true, TrustedAuthservDomains: []string{"qq.com"}}
+
+	message, err := DecodeMessageHeadersWithLimit(strings.NewReader(raw), security, time.Now(), DefaultMaxMessageBytes)
+	require.NoError(t, err)
+	assert.False(t, message.Authenticated)
+
+	_, err = DecodeMessageHeadersWithLimit(strings.NewReader(raw), security, time.Now(), 32)
+	require.ErrorContains(t, err, "size limit")
+}

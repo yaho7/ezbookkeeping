@@ -198,7 +198,7 @@ func (m *IMAPMailbox) fetchAuthenticatedHeaders(ctx context.Context, imapClient 
 			if header == nil {
 				continue
 			}
-			decoded, decodeErr := DecodeMessageWithLimit(header, m.config.Security, messageDates[fetchedMessage.Uid], m.maxMessageBytes())
+			decoded, decodeErr := DecodeMessageHeadersWithLimit(header, m.config.Security, messageDates[fetchedMessage.Uid], m.maxMessageBytes())
 			if decodeErr != nil || !decoded.Authenticated || !m.supported(decoded) {
 				continue
 			}
