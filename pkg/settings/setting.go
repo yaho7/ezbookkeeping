@@ -329,9 +329,8 @@ type MultiLanguageContentConfig struct {
 // Config represents the global setting config
 type Config struct {
 	// Global
-	Mode           SystemMode
-	WorkingPath    string
-	ConfigFilePath string
+	Mode        SystemMode
+	WorkingPath string
 
 	// Server
 	Protocol Scheme
@@ -521,7 +520,7 @@ func LoadConfiguration(configFilePath string) (*Config, error) {
 		return nil, err
 	}
 
-	config := &Config{ConfigFilePath: configFilePath}
+	config := &Config{}
 	config.WorkingPath, err = getWorkingPath()
 
 	if err != nil {

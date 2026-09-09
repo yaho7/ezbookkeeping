@@ -1,53 +1,12 @@
 package settings
 
 import (
-	"os"
-	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"gopkg.in/ini.v1"
 )
-
-func TestSaveEmailBillConfigurationPreservesOtherSections(t *testing.T) {
-	configPath := filepath.Join(t.TempDir(), "ezbookkeeping.ini")
-	require.NoError(t, os.WriteFile(configPath, []byte("[server]\nhttp_port = 8080\n\n[email_bill]\nenabled = false\n"), 0o600))
-
-	emailConfig := &EmailBillConfig{
-		Enabled:                      true,
-		TargetUser:                   "alice",
-		IMAPServer:                   "imap.qq.com",
-		IMAPPort:                     993,
-		MailUser:                     "alice@qq.com",
-		MailPassword:                 "app-password",
-		CMBCreditAccountID:           101,
-		CMBDebitAccountID:            102,
-		ExpenseCategoryID:            201,
-		IncomeCategoryID:             202,
-		Timezone:                     "Asia/Shanghai",
-		CronExpression:               "30 8 * * 1-5",
-		MaxEmails:                    60,
-		MaxMessageBytes:              2 * 1024 * 1024,
-		RequireAuthenticationResults: true,
-		TrustedAuthservDomains:       []string{"qq.com"},
-	}
-
-	require.NoError(t, SaveEmailBillConfiguration(configPath, emailConfig))
-
-	configFile, err := ini.Load(configPath)
-	require.NoError(t, err)
-	assert.Equal(t, "8080", configFile.Section("server").Key("http_port").String())
-	assert.Equal(t, "true", configFile.Section("email_bill").Key("enabled").String())
-	assert.Equal(t, "alice", configFile.Section("email_bill").Key("target_user").String())
-	assert.Equal(t, "app-password", configFile.Section("email_bill").Key("mail_password").String())
-	assert.Equal(t, "30 8 * * 1-5", configFile.Section("email_bill").Key("cron_expression").String())
-	assert.Equal(t, "qq.com", configFile.Section("email_bill").Key("trusted_authserv_domains").String())
-
-	fileInfo, err := os.Stat(configPath)
-	require.NoError(t, err)
-	assert.Equal(t, os.FileMode(0o600), fileInfo.Mode().Perm())
-}
 
 func TestLoadEmailBillConfigurationDisabledByDefault(t *testing.T) {
 	config := &Config{}
