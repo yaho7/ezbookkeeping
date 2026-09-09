@@ -4,7 +4,7 @@ import { defineStore } from 'pinia';
 import type {
     EmailBillSettings, EmailBillParserRule, EmailBillMessageSample,
     EmailBillParserPreview, EmailBillRoutingRule, EmailBillClassificationRule,
-    EmailBillCandidate, EmailBillAuditEvent
+    EmailBillCandidate, EmailBillAuditEvent, EmailBillGeneratedParser
 } from '@/core/emailBill.ts';
 import { normalizeEmailBillCandidate } from '@/core/emailBill.ts';
 import services from '@/lib/services.ts';
@@ -48,6 +48,10 @@ export const useEmailBillStore = defineStore('emailBill', () => {
 
     async function testParser(request: Record<string, unknown>): Promise<EmailBillParserPreview> {
         return resultOf(await services.testEmailBillParser(request));
+    }
+
+    async function generateParser(request: Record<string, unknown>): Promise<EmailBillGeneratedParser> {
+        return resultOf(await services.generateEmailBillParser(request));
     }
 
     async function disableParser(id: string): Promise<void> {
@@ -101,7 +105,7 @@ export const useEmailBillStore = defineStore('emailBill', () => {
 
     return {
         settings, parsers, messages, routes, classifications, candidates,
-        loadAll, saveSettings, saveParser, testParser, disableParser,
+        loadAll, saveSettings, saveParser, testParser, generateParser, disableParser,
         saveRoute, disableRoute, saveClassification, disableClassification, deleteClassification,
         reloadCandidates, confirmCandidate, retryCandidate, loadAudit
     };

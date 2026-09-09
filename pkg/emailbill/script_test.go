@@ -76,8 +76,36 @@ func TestParserMatcherMatchesSenderAndSubject(t *testing.T) {
 	matcher := ParserMatcher{Senders: []string{"notice@example.com"}, SubjectContains: []string{"账单"}}
 
 	assert.True(t, matcher.Matches(ScriptMail{Sender: "NOTICE@example.com", Subject: "本月账单通知"}))
+	assert.True(t, matcher.Matches(ScriptMail{Sender: "Bank <notice@example.com>", Subject: "本月账单通知"}))
 	assert.False(t, matcher.Matches(ScriptMail{Sender: "other@example.com", Subject: "本月账单通知"}))
 	assert.False(t, matcher.Matches(ScriptMail{Sender: "notice@example.com", Subject: "验证码"}))
+}
+
+func TestScriptParserCanCallBuiltInCMBParser(t *testing.T) {
+	parser := NewScriptParser(ScriptLimits{MaxExecutionSteps: 10000, MaxOutputs: 4})
+	mail := ScriptMail{
+		Sender: "招商银行 <ccsvc@message.cmbchina.com>", Subject: "招商银行每日信用管家",
+		ReceivedAt: time.Date(2026, 9, 7, 9, 0, 0, 0, time.FixedZone("CST", 8*60*60)),
+		Text:       "2026/09/06 11:03:15 CNY 1.53 尾号5460 消费 麦当劳 (每日邮件)",
+	}
+
+	bills, _, err := parser.Parse("def parse(mail):\n    return parse_builtin(\"cmb_credit\", mail)", mail)
+
+	require.NoError(t, err)
+	require.Len(t, bills, 1)
+	assert.Equal(t, int64(153), bills[0].AmountMinor)
+	assert.Equal(t, "expense", bills[0].FlowType)
+	assert.Equal(t, "cmb", bills[0].AccountHint.Bank)
+	assert.Equal(t, "credit", bills[0].AccountHint.Kind)
+	assert.Equal(t, "麦当劳", bills[0].Merchant)
+}
+
+func TestScriptParserRejectsUnknownBuiltInParser(t *testing.T) {
+	parser := NewScriptParser(ScriptLimits{MaxExecutionSteps: 10000})
+
+	_, _, err := parser.Parse("def parse(mail):\n    return parse_builtin(\"unknown\", mail)", ScriptMail{})
+
+	assert.ErrorContains(t, err, "unsupported built-in parser")
 }
 
 func TestScriptParserRejectsInvalidBill(t *testing.T) {

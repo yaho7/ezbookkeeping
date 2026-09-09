@@ -15,13 +15,14 @@ import (
 func TestEmailBillParserRuleResponseUsesStringIDsAndVersion(t *testing.T) {
 	response := emailBillParserRuleResponse(&services.EmailBillParserRuleInfo{
 		Rule:    &models.EmailBillParserRule{ParserRuleId: 9007199254740993, Name: "bank", Enabled: true, CurrentVersionId: 8},
-		Version: &models.EmailBillParserRuleVersion{ParserRuleVersionId: 8, Version: 3, MatcherJson: `{}`, SourceCode: "def parse(mail): return []"},
+		Version: &models.EmailBillParserRuleVersion{ParserRuleVersionId: 8, Version: 3, MatcherJson: `{}`, SourceCode: "def parse(mail): return []", CreatedBy: "preset:cmb_credit"},
 	})
 	raw, err := json.Marshal(response)
 	require.NoError(t, err)
 
 	assert.Contains(t, string(raw), `"id":"9007199254740993"`)
 	assert.Contains(t, string(raw), `"version":3`)
+	assert.Contains(t, string(raw), `"createdBy":"preset:cmb_credit"`)
 	assert.NotContains(t, string(raw), `currentVersionId`)
 }
 
@@ -36,4 +37,15 @@ func TestEmailBillParserTestRequestParsesRFC3339MailTime(t *testing.T) {
 	assert.Equal(t, 10, request.Mail.ReceivedAt.Hour())
 	_, offset := request.Mail.ReceivedAt.Zone()
 	assert.Equal(t, 8*60*60, offset)
+}
+
+func TestEmailBillParserGenerateRequestParsesMail(t *testing.T) {
+	mail, err := emailBillTestMailServiceRequest(emailBillTestMailRequest{
+		MessageID: "m1", Sender: "bank@example.com", Subject: "bill", Text: "content",
+		ReceivedAt: "2026-09-08T10:00:00+08:00",
+	})
+
+	require.NoError(t, err)
+	assert.Equal(t, "m1", mail.RemoteMessageID)
+	assert.Equal(t, 10, mail.ReceivedAt.Hour())
 }

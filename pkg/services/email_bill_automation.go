@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	"xorm.io/xorm"
@@ -21,9 +22,11 @@ const emailBillParserRuntimeVersion = "starlark-v1"
 
 // EmailBillAutomationService manages user-editable, immutable rule versions.
 type EmailBillAutomationService struct {
-	db     *datastore.DataStoreContainer
-	uuids  *uuid.UuidContainer
-	parser *emailbill.ScriptParser
+	db            *datastore.DataStoreContainer
+	uuids         *uuid.UuidContainer
+	parser        *emailbill.ScriptParser
+	generator     EmailBillParserCodeGenerator
+	defaultsMutex sync.Mutex
 }
 
 // EmailBillAutomation is the shared automation settings service.
@@ -31,7 +34,10 @@ var EmailBillAutomation = NewEmailBillAutomationService(datastore.Container, uui
 
 // NewEmailBillAutomationService creates the rule and test-bench service.
 func NewEmailBillAutomationService(db *datastore.DataStoreContainer, uuids *uuid.UuidContainer) *EmailBillAutomationService {
-	return &EmailBillAutomationService{db: db, uuids: uuids, parser: emailbill.NewScriptParser(emailbill.ScriptLimits{})}
+	return &EmailBillAutomationService{
+		db: db, uuids: uuids, parser: emailbill.NewScriptParser(emailbill.ScriptLimits{}),
+		generator: NewConfiguredEmailBillParserCodeGenerator(),
+	}
 }
 
 // EmailBillParserTestRequest is a no-side-effect parser test.
@@ -109,8 +115,42 @@ type EmailBillParserRuleInfo struct {
 	Version *models.EmailBillParserRuleVersion `json:"version"`
 }
 
+type defaultEmailBillParserRule struct {
+	CreatedBy string
+	Input     EmailBillParserRuleInput
+}
+
+func defaultEmailBillParserRules() []defaultEmailBillParserRule {
+	return []defaultEmailBillParserRule{
+		{
+			CreatedBy: "preset:cmb_credit",
+			Input: EmailBillParserRuleInput{
+				Name: "招商银行信用卡（默认）", Bank: "招商银行", Enabled: true, Priority: 100,
+				Matcher: emailbill.ParserMatcher{
+					Senders:         []string{"ccsvc@message.cmbchina.com", "95555@message.cmbchina.com"},
+					SubjectContains: []string{"每日信用管家"},
+				},
+				Source: "def parse(mail):\n    return parse_builtin(\"cmb_credit\", mail)",
+			},
+		},
+		{
+			CreatedBy: "preset:cmb_debit",
+			Input: EmailBillParserRuleInput{
+				Name: "招商银行储蓄卡（默认）", Bank: "招商银行", Enabled: true, Priority: 90,
+				Matcher: emailbill.ParserMatcher{
+					Senders: []string{"95555@message.cmbchina.com"}, SubjectContains: []string{"通知"},
+				},
+				Source: "def parse(mail):\n    return parse_builtin(\"cmb_debit\", mail)",
+			},
+		},
+	}
+}
+
 // ListParserRules returns all active logical parser rules and current versions.
 func (s *EmailBillAutomationService) ListParserRules(c core.Context, uid int64) ([]*EmailBillParserRuleInfo, error) {
+	if err := s.ensureDefaultParserRules(c, uid); err != nil {
+		return nil, err
+	}
 	var rules []*models.EmailBillParserRule
 	if err := s.userDB(uid).NewSession(c).Where("uid=? AND deleted_unix_time=?", uid, 0).OrderBy("priority desc, parser_rule_id asc").Find(&rules); err != nil {
 		return nil, err
@@ -131,6 +171,10 @@ func (s *EmailBillAutomationService) ListParserRules(c core.Context, uid int64) 
 
 // SaveParserRule creates a logical rule or appends a new immutable version.
 func (s *EmailBillAutomationService) SaveParserRule(c core.Context, uid int64, input EmailBillParserRuleInput) (*EmailBillParserRuleInfo, error) {
+	return s.saveParserRule(c, uid, input, "user")
+}
+
+func (s *EmailBillAutomationService) saveParserRule(c core.Context, uid int64, input EmailBillParserRuleInput, createdBy string) (*EmailBillParserRuleInfo, error) {
 	input.Name = strings.TrimSpace(input.Name)
 	input.Source = strings.TrimSpace(input.Source)
 	if input.Name == "" || input.Source == "" {
@@ -169,8 +213,8 @@ func (s *EmailBillAutomationService) SaveParserRule(c core.Context, uid int64, i
 		ParserRuleVersionId: s.newID(), ParserRuleId: rule.ParserRuleId, Version: versionNumber,
 		MatcherJson: string(matcherJSON), MatcherHash: matcherHash, SourceCode: input.Source, SourceHash: sourceHash,
 		Runtime: "starlark", RuntimeVersion: emailBillParserRuntimeVersion, ParserApiVersion: 1,
-		VersionHash:        hashEmailBillValue([]byte(fmt.Sprintf("%d\x00%s\x00%s", versionNumber, matcherHash, sourceHash))),
-		ExecutionTimeoutMs: 200, InstructionLimit: 100000, CreatedBy: "user", CreatedUnixTime: now,
+		VersionHash:        hashEmailBillValue([]byte(fmt.Sprintf("%d\x00%d\x00%s\x00%s", rule.ParserRuleId, versionNumber, matcherHash, sourceHash))),
+		ExecutionTimeoutMs: 200, InstructionLimit: 100000, CreatedBy: createdBy, CreatedUnixTime: now,
 	}
 	rule.CurrentVersionId = version.ParserRuleVersionId
 	err = s.userDB(uid).DoTransaction(c, func(sess *xorm.Session) error {
@@ -188,6 +232,39 @@ func (s *EmailBillAutomationService) SaveParserRule(c core.Context, uid int64, i
 		return nil, err
 	}
 	return &EmailBillParserRuleInfo{Rule: rule, Version: version}, nil
+}
+
+func (s *EmailBillAutomationService) ensureDefaultParserRules(c core.Context, uid int64) error {
+	s.defaultsMutex.Lock()
+	defer s.defaultsMutex.Unlock()
+
+	var userRules []*models.EmailBillParserRule
+	if err := s.userDB(uid).NewSession(c).Where("uid=?", uid).Find(&userRules); err != nil {
+		return err
+	}
+	for _, preset := range defaultEmailBillParserRules() {
+		found := false
+		for _, rule := range userRules {
+			has, err := s.userDB(uid).NewSession(c).
+				Where("parser_rule_id=? AND created_by=?", rule.ParserRuleId, preset.CreatedBy).
+				Exist(&models.EmailBillParserRuleVersion{})
+			if err != nil {
+				return err
+			}
+			if has {
+				found = true
+				break
+			}
+		}
+		if !found {
+			info, err := s.saveParserRule(c, uid, preset.Input, preset.CreatedBy)
+			if err != nil {
+				return err
+			}
+			userRules = append(userRules, info.Rule)
+		}
+	}
+	return nil
 }
 
 // DisableParserRule disables a rule without deleting its version history.

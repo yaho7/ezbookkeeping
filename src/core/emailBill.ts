@@ -30,6 +30,7 @@ export interface EmailBillParserRule {
     matcher: EmailBillMatcher;
     sourceCode: string;
     runtimeVersion: string;
+    createdBy: string;
     updatedUnixTime: number;
 }
 
@@ -53,6 +54,14 @@ export interface EmailBillParserPreview {
         candidateIdentity: string;
         billFingerprint: string;
     }>;
+}
+
+export interface EmailBillGeneratedParser {
+    name: string;
+    bank: string;
+    matcher: EmailBillMatcher;
+    sourceCode: string;
+    preview: EmailBillParserPreview;
 }
 
 export interface EmailBillRoutingRule {
@@ -133,7 +142,7 @@ export function createEmailBillParserRule(): EmailBillParserRule {
         versionId: '', version: 0,
         matcher: { senders: [], subjectContains: [] },
         sourceCode: 'def parse(mail):\n    return []',
-        runtimeVersion: 'starlark-v1', updatedUnixTime: 0
+        runtimeVersion: 'starlark-v1', createdBy: 'user', updatedUnixTime: 0
     };
 }
 

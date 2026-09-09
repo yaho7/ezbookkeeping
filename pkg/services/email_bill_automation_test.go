@@ -75,3 +75,14 @@ func TestEmailBillRoutingRuleSignatureIsCanonical(t *testing.T) {
 
 	assert.Equal(t, left, right)
 }
+
+func TestDefaultEmailBillParserRulesExposeEditableCMBPresets(t *testing.T) {
+	rules := defaultEmailBillParserRules()
+
+	require.Len(t, rules, 2)
+	assert.Equal(t, "preset:cmb_credit", rules[0].CreatedBy)
+	assert.Contains(t, rules[0].Input.Source, `parse_builtin("cmb_credit", mail)`)
+	assert.Equal(t, []string{"每日信用管家"}, rules[0].Input.Matcher.SubjectContains)
+	assert.Equal(t, "preset:cmb_debit", rules[1].CreatedBy)
+	assert.Contains(t, rules[1].Input.Source, `parse_builtin("cmb_debit", mail)`)
+}

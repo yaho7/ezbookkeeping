@@ -10,11 +10,13 @@ import type {
     EmailBillParserRule,
     EmailBillMessageSample,
     EmailBillParserPreview,
+    EmailBillGeneratedParser,
     EmailBillRoutingRule,
     EmailBillClassificationRule,
     EmailBillCandidate,
     EmailBillAuditEvent
 } from '@/core/emailBill.ts';
+import type { LLMSettings } from '@/core/llm.ts';
 import type {
     VersionInfo
 } from '@/core/version.ts';
@@ -455,6 +457,12 @@ export default {
     disableUserApplicationCloudSettings: (): ApiResponsePromise<boolean> => {
         return axios.post<ApiResponse<boolean>>('v1/users/settings/cloud/disable.json');
     },
+    getLLMSettings: (): ApiResponsePromise<LLMSettings> => {
+        return axios.get<ApiResponse<LLMSettings>>('v1/users/settings/llm/get.json');
+    },
+    updateLLMSettings: (req: LLMSettings): ApiResponsePromise<LLMSettings> => {
+        return axios.post<ApiResponse<LLMSettings>>('v1/users/settings/llm/update.json', req);
+    },
     getEmailBillSettings: (): ApiResponsePromise<EmailBillSettings> => {
         return axios.get<ApiResponse<EmailBillSettings>>('v1/users/settings/email_bill/get.json');
     },
@@ -475,6 +483,9 @@ export default {
     },
     testEmailBillParser: (req: Record<string, unknown>): ApiResponsePromise<EmailBillParserPreview> => {
         return axios.post<ApiResponse<EmailBillParserPreview>>('v1/email_bill/parsers/test.json', req);
+    },
+    generateEmailBillParser: (req: Record<string, unknown>): ApiResponsePromise<EmailBillGeneratedParser> => {
+        return axios.post<ApiResponse<EmailBillGeneratedParser>>('v1/email_bill/parsers/generate.json', req, { timeout: DEFAULT_LLM_API_TIMEOUT });
     },
     listEmailBillMessages: (): ApiResponsePromise<EmailBillMessageSample[]> => {
         return axios.get<ApiResponse<EmailBillMessageSample[]>>('v1/email_bill/messages/list.json');

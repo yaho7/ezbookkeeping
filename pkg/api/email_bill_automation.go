@@ -50,6 +50,10 @@ type emailBillParserTestRequest struct {
 	Mail       emailBillTestMailRequest `json:"mail" binding:"required"`
 }
 
+type emailBillParserGenerateRequest struct {
+	Mail emailBillTestMailRequest `json:"mail" binding:"required"`
+}
+
 type emailBillParserRuleInfoResponse struct {
 	ID              string                  `json:"id"`
 	Name            string                  `json:"name"`
@@ -61,6 +65,7 @@ type emailBillParserRuleInfoResponse struct {
 	Matcher         emailbill.ParserMatcher `json:"matcher"`
 	SourceCode      string                  `json:"sourceCode"`
 	RuntimeVersion  string                  `json:"runtimeVersion"`
+	CreatedBy       string                  `json:"createdBy"`
 	UpdatedUnixTime int64                   `json:"updatedUnixTime"`
 }
 
@@ -197,6 +202,23 @@ func (a *EmailBillAutomationApi) ParserTestHandler(c *core.WebContext) (any, *er
 		return nil, errs.NewIncompleteOrIncorrectSubmissionError(err)
 	}
 	return result, nil
+}
+
+// ParserGenerateHandler asks the global application LLM for a draft and dry-runs it.
+func (a *EmailBillAutomationApi) ParserGenerateHandler(c *core.WebContext) (any, *errs.Error) {
+	request := emailBillParserGenerateRequest{}
+	if err := c.ShouldBindJSON(&request); err != nil {
+		return nil, errs.NewIncompleteOrIncorrectSubmissionError(err)
+	}
+	mail, err := emailBillTestMailServiceRequest(request.Mail)
+	if err != nil {
+		return nil, errs.NewIncompleteOrIncorrectSubmissionError(err)
+	}
+	draft, err := a.service.GenerateParserDraft(c, c.GetCurrentUid(), mail)
+	if err != nil {
+		return nil, errs.NewIncompleteOrIncorrectSubmissionError(err)
+	}
+	return draft, nil
 }
 
 // RoutingRuleListHandler returns account routing rules.
@@ -403,6 +425,7 @@ func emailBillParserRuleResponse(info *services.EmailBillParserRuleInfo) *emailB
 		Enabled: info.Rule.Enabled, Priority: info.Rule.Priority,
 		VersionID: strconv.FormatInt(info.Version.ParserRuleVersionId, 10), Version: info.Version.Version,
 		Matcher: matcher, SourceCode: info.Version.SourceCode, RuntimeVersion: info.Version.RuntimeVersion,
+		CreatedBy:       info.Version.CreatedBy,
 		UpdatedUnixTime: info.Rule.UpdatedUnixTime,
 	}
 }
@@ -429,15 +452,20 @@ func emailBillClassificationRuleResponseFromInfo(info *services.EmailBillClassif
 }
 
 func emailBillParserTestServiceRequest(uid int64, request emailBillParserTestRequest) (services.EmailBillParserTestRequest, error) {
-	receivedAt, err := time.Parse(time.RFC3339, request.Mail.ReceivedAt)
+	mail, err := emailBillTestMailServiceRequest(request.Mail)
 	if err != nil {
-		return services.EmailBillParserTestRequest{}, fmt.Errorf("receivedAt must be RFC3339: %w", err)
+		return services.EmailBillParserTestRequest{}, err
 	}
-	return services.EmailBillParserTestRequest{
-		UID: uid, Matcher: request.Matcher, SourceCode: request.SourceCode,
-		Mail: services.EmailBillFetchedMessage{
-			RemoteMessageID: request.Mail.MessageID, Sender: request.Mail.Sender, Subject: request.Mail.Subject,
-			ReceivedAt: receivedAt, Text: request.Mail.Text, Headers: request.Mail.Headers, Authenticated: true,
-		},
+	return services.EmailBillParserTestRequest{UID: uid, Matcher: request.Matcher, SourceCode: request.SourceCode, Mail: mail}, nil
+}
+
+func emailBillTestMailServiceRequest(request emailBillTestMailRequest) (services.EmailBillFetchedMessage, error) {
+	receivedAt, err := time.Parse(time.RFC3339, request.ReceivedAt)
+	if err != nil {
+		return services.EmailBillFetchedMessage{}, fmt.Errorf("receivedAt must be RFC3339: %w", err)
+	}
+	return services.EmailBillFetchedMessage{
+		RemoteMessageID: request.MessageID, Sender: request.Sender, Subject: request.Subject,
+		ReceivedAt: receivedAt, Text: request.Text, Headers: request.Headers, Authenticated: true,
 	}, nil
 }

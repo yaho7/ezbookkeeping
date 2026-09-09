@@ -50,6 +50,21 @@ func (c *ConfigContainer) UpdateEmailBillConfig(emailConfig *EmailBillConfig) er
 	return nil
 }
 
+// UpdateTextRecognitionLLMConfig replaces only the text-recognition LLM configuration.
+func (c *ConfigContainer) UpdateTextRecognitionLLMConfig(llmConfig *LLMConfig) error {
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+
+	if c.current == nil {
+		return fmt.Errorf("current configuration is not initialized")
+	}
+
+	updated := *c.current
+	updated.TextRecognitionLLMConfig = cloneLLMConfig(llmConfig)
+	c.current = &updated
+	return nil
+}
+
 func cloneEmailBillConfig(config *EmailBillConfig) *EmailBillConfig {
 	if config == nil {
 		return nil
@@ -57,5 +72,14 @@ func cloneEmailBillConfig(config *EmailBillConfig) *EmailBillConfig {
 
 	cloned := *config
 	cloned.TrustedAuthservDomains = append([]string(nil), config.TrustedAuthservDomains...)
+	return &cloned
+}
+
+func cloneLLMConfig(config *LLMConfig) *LLMConfig {
+	if config == nil {
+		return nil
+	}
+
+	cloned := *config
 	return &cloned
 }
