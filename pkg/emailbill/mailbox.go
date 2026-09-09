@@ -8,6 +8,7 @@ import (
 	"net/textproto"
 	"sort"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/emersion/go-imap"
@@ -41,6 +42,7 @@ type IMAPMailbox struct {
 	config        MailboxConfig
 	parsers       []Parser
 	messageFilter MessageFilter
+	seenMessages  map[string]struct{}
 }
 
 // NewIMAPMailbox creates a read-only IMAP mailbox client.
@@ -63,17 +65,52 @@ func (m *IMAPMailbox) TestConnection(ctx context.Context) error {
 	return nil
 }
 
-// FetchRecent fetches up to MaxEmails recent messages for each supported sender/subject pair.
+// FetchRecent scans all selectable folders with one shared processing limit.
 func (m *IMAPMailbox) FetchRecent(ctx context.Context) ([]Message, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
 
-	imapClient, err := m.openInbox(ctx)
+	imapClient, err := m.openConnection(ctx)
 	if err != nil {
 		return nil, err
 	}
 	defer func() { _ = imapClient.Logout() }()
+	m.seenMessages = make(map[string]struct{})
+
+	folders, err := listMailboxFolders(imapClient)
+	if err != nil {
+		return nil, err
+	}
+	var messages []Message
+	for _, folder := range folders {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		remaining := uint32(0)
+		if m.config.MaxEmails > 0 {
+			remaining = m.config.MaxEmails - uint32(len(messages))
+		}
+		batch, err := m.fetchFolder(ctx, imapClient, folder, remaining)
+		if err != nil {
+			return nil, fmt.Errorf("fetch IMAP folder %q: %w", folder, err)
+		}
+		messages = append(messages, batch...)
+		if m.config.MaxEmails > 0 && uint32(len(messages)) >= m.config.MaxEmails {
+			break
+		}
+	}
+	return messages, nil
+}
+
+func (m *IMAPMailbox) fetchFolder(ctx context.Context, imapClient *client.Client, folder string, limit uint32) ([]Message, error) {
+	status, err := imapClient.Select(folder, true)
+	if err != nil {
+		return nil, err
+	}
+	if status.Messages == 0 {
+		return nil, nil
+	}
 
 	uids, err := m.searchSupportedUIDs(imapClient)
 	if err != nil {
@@ -83,7 +120,7 @@ func (m *IMAPMailbox) FetchRecent(ctx context.Context) ([]Message, error) {
 		return nil, nil
 	}
 
-	return fetchRecentMessageBatches(ctx, uids, m.config.MaxEmails, func(batch []uint32, remaining uint32) ([]Message, error) {
+	return fetchRecentMessageBatches(ctx, uids, limit, func(batch []uint32, remaining uint32) ([]Message, error) {
 		messageDates, err := m.fetchMessageDatesWithinLimit(ctx, imapClient, batch)
 		if err != nil || len(messageDates) == 0 {
 			return nil, err
@@ -95,6 +132,61 @@ func (m *IMAPMailbox) FetchRecent(ctx context.Context) ([]Message, error) {
 		messageDates = newestMessageDates(messageDates, remaining)
 		return m.fetchAuthenticatedBodies(ctx, imapClient, sortedUIDs(messageDates), messageDates)
 	})
+}
+
+func listMailboxFolders(imapClient *client.Client) ([]string, error) {
+	listed := make(chan *imap.MailboxInfo)
+	done := make(chan error, 1)
+	go func() { done <- imapClient.List("", "*", listed) }()
+	var infos []*imap.MailboxInfo
+	for info := range listed {
+		infos = append(infos, info)
+	}
+	if err := <-done; err != nil {
+		return nil, fmt.Errorf("list IMAP folders: %w", err)
+	}
+	return selectableMailboxNames(infos), nil
+}
+
+func selectableMailboxNames(infos []*imap.MailboxInfo) []string {
+	var names []string
+	seen := make(map[string]bool)
+	for _, info := range infos {
+		if info == nil || info.Name == "" {
+			continue
+		}
+		selectable := true
+		for _, attr := range info.Attributes {
+			if strings.EqualFold(attr, imap.NoSelectAttr) {
+				selectable = false
+			}
+		}
+		name := imap.CanonicalMailboxName(info.Name)
+		if selectable && !seen[name] {
+			names = append(names, name)
+			seen[name] = true
+		}
+	}
+	// Scan user filing folders before the often much larger inbox and system folders.
+	sort.Slice(names, func(i, j int) bool {
+		left, right := mailboxScanPriority(names[i]), mailboxScanPriority(names[j])
+		if left != right {
+			return left < right
+		}
+		return names[i] < names[j]
+	})
+	return names
+}
+
+func mailboxScanPriority(name string) int {
+	switch strings.ToLower(name) {
+	case "inbox":
+		return 1
+	case "sent", "sent messages", "drafts", "deleted messages", "trash", "junk", "spam":
+		return 2
+	default:
+		return 0
+	}
 }
 
 // fetchRecentMessageBatches bounds each IMAP command and stops once enough
@@ -126,6 +218,18 @@ func fetchRecentMessageBatches(ctx context.Context, uids []uint32, limit uint32,
 }
 
 func (m *IMAPMailbox) openInbox(ctx context.Context) (*client.Client, error) {
+	imapClient, err := m.openConnection(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if _, err = imapClient.Select("INBOX", true); err != nil {
+		_ = imapClient.Logout()
+		return nil, fmt.Errorf("select IMAP inbox: %w", err)
+	}
+	return imapClient, nil
+}
+
+func (m *IMAPMailbox) openConnection(ctx context.Context) (*client.Client, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -143,10 +247,6 @@ func (m *IMAPMailbox) openInbox(ctx context.Context) (*client.Client, error) {
 	if err = imapClient.Login(m.config.Username, m.config.Password); err != nil {
 		_ = imapClient.Logout()
 		return nil, fmt.Errorf("login to IMAP server: %w", err)
-	}
-	if _, err = imapClient.Select("INBOX", true); err != nil {
-		_ = imapClient.Logout()
-		return nil, fmt.Errorf("select IMAP inbox: %w", err)
 	}
 	return imapClient, nil
 }
@@ -228,6 +328,11 @@ func (m *IMAPMailbox) fetchAuthenticatedHeaders(ctx context.Context, imapClient 
 			if decodeErr != nil || !decoded.Authenticated || !m.supported(decoded) {
 				continue
 			}
+			if decoded.MessageID != "" {
+				if _, seen := m.seenMessages[mailboxMessageIdentity(decoded)]; seen {
+					continue
+				}
+			}
 			if m.messageFilter != nil {
 				include, filterErr := m.messageFilter(ctx, decoded)
 				if filterErr != nil {
@@ -280,9 +385,31 @@ func (m *IMAPMailbox) fetchAuthenticatedBodies(ctx context.Context, imapClient *
 			if decodeErr != nil || !decoded.Authenticated || !m.supported(decoded) {
 				continue
 			}
-			messages = append(messages, decoded)
+			if m.acceptFetchedMessage(decoded) {
+				messages = append(messages, decoded)
+			}
 		}
 	}
+}
+
+func mailboxMessageIdentity(message Message) string {
+	identity, _ := MessageFingerprint(MessageIdentityInput{
+		MessageID: message.MessageID, Sender: message.Sender, Subject: message.Subject,
+		ReceivedAt: message.ReceivedAt, Body: message.Text,
+	})
+	return identity
+}
+
+func (m *IMAPMailbox) acceptFetchedMessage(message Message) bool {
+	if m.seenMessages == nil {
+		m.seenMessages = make(map[string]struct{})
+	}
+	identity := mailboxMessageIdentity(message)
+	if _, seen := m.seenMessages[identity]; seen {
+		return false
+	}
+	m.seenMessages[identity] = struct{}{}
+	return true
 }
 
 func (m *IMAPMailbox) maxMessageBytes() uint32 {

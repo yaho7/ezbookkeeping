@@ -7,9 +7,27 @@ import (
 	"testing"
 	"time"
 
+	"github.com/emersion/go-imap"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func TestSelectableMailboxNamesIncludesNestedFoldersAndSkipsContainers(t *testing.T) {
+	names := selectableMailboxNames([]*imap.MailboxInfo{
+		{Name: "INBOX"}, {Name: "其他文件夹", Attributes: []string{"\\NoSelect"}},
+		{Name: "其他文件夹/账单"}, {Name: "Sent Messages"}, {Name: "inbox"}, nil,
+	})
+	assert.Equal(t, []string{"其他文件夹/账单", "INBOX", "Sent Messages"}, names)
+}
+
+func TestMailboxDeduplicatesCopiesAcrossFoldersByMessageIdentity(t *testing.T) {
+	m := NewIMAPMailbox(MailboxConfig{}, nil)
+	m.seenMessages = make(map[string]struct{})
+	message := Message{MessageID: "<same@example.com>", Text: "bank notification"}
+	assert.True(t, m.acceptFetchedMessage(message))
+	assert.False(t, m.acceptFetchedMessage(message))
+	assert.True(t, m.acceptFetchedMessage(Message{MessageID: "<different@example.com>", Text: message.Text}))
+}
 
 func TestFetchRecentMessageBatchesSkipsEmptyBatchesAndStopsAtLimit(t *testing.T) {
 	uids := make([]uint32, 120)
