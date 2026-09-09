@@ -368,9 +368,6 @@ func startWebServer(c *core.CliContext) error {
 			apiV1Route.GET("/users/settings/cloud/get.json", bindApi(api.UserApplicationCloudSettings.ApplicationSettingsGetHandler, config))
 			apiV1Route.POST("/users/settings/cloud/update.json", bindApi(api.UserApplicationCloudSettings.ApplicationSettingsUpdateHandler, config))
 			apiV1Route.POST("/users/settings/cloud/disable.json", bindApi(api.UserApplicationCloudSettings.ApplicationSettingsDisableHandler, config))
-			apiV1Route.GET("/users/settings/email_bill/get.json", bindApi(api.EmailBillSettings.GetHandler, config))
-			apiV1Route.POST("/users/settings/email_bill/update.json", bindApi(api.EmailBillSettings.UpdateHandler, config))
-			apiV1Route.POST("/users/settings/email_bill/run.json", bindApi(api.EmailBillSettings.RunHandler, config))
 
 			// Two-Factor Authorization
 			if config.EnableTwoFactor {
