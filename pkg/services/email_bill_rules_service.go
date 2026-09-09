@@ -158,7 +158,7 @@ func (s *EmailBillAutomationService) DisableRoutingRule(c core.Context, uid, rul
 // ListClassificationRules returns manual and learned merchant mappings.
 func (s *EmailBillAutomationService) ListClassificationRules(c core.Context, uid int64) ([]*EmailBillClassificationRuleInfo, error) {
 	var rules []*models.EmailBillClassificationRule
-	if err := s.userDB(uid).NewSession(c).Where("uid=?", uid).OrderBy("priority desc, classification_rule_id asc").Find(&rules); err != nil {
+	if err := s.userDB(uid).NewSession(c).Where("uid=? AND deleted_unix_time=?", uid, 0).OrderBy("priority desc, classification_rule_id asc").Find(&rules); err != nil {
 		return nil, err
 	}
 	result := make([]*EmailBillClassificationRuleInfo, 0, len(rules))
@@ -199,7 +199,7 @@ func (s *EmailBillAutomationService) SaveClassificationRule(c core.Context, uid 
 	if input.RuleID <= 0 {
 		rule.ClassificationRuleId, rule.CreatedUnixTime = s.newID(), now
 	} else {
-		has, err := s.userDB(uid).NewSession(c).Where("uid=? AND classification_rule_id=?", uid, input.RuleID).Get(rule)
+		has, err := s.userDB(uid).NewSession(c).Where("uid=? AND classification_rule_id=? AND deleted_unix_time=?", uid, input.RuleID, 0).Get(rule)
 		if err != nil || !has {
 			if err != nil {
 				return nil, err
@@ -238,8 +238,23 @@ func (s *EmailBillAutomationService) SaveClassificationRule(c core.Context, uid 
 // DisableClassificationRule makes manual or learned mappings reversible.
 func (s *EmailBillAutomationService) DisableClassificationRule(c core.Context, uid, ruleID int64) error {
 	now := time.Now().Unix()
-	updated, err := s.userDB(uid).NewSession(c).Cols("enabled", "updated_unix_time", "disabled_unix_time").Where("uid=? AND classification_rule_id=?", uid, ruleID).
+	updated, err := s.userDB(uid).NewSession(c).Cols("enabled", "updated_unix_time", "disabled_unix_time").Where("uid=? AND classification_rule_id=? AND deleted_unix_time=?", uid, ruleID, 0).
 		Update(&models.EmailBillClassificationRule{Enabled: false, UpdatedUnixTime: now, DisabledUnixTime: now})
+	if err != nil {
+		return err
+	}
+	if updated != 1 {
+		return fmt.Errorf("classification rule not found")
+	}
+	return nil
+}
+
+// DeleteClassificationRule removes a mapping from active management while retaining immutable versions for audit references.
+func (s *EmailBillAutomationService) DeleteClassificationRule(c core.Context, uid, ruleID int64) error {
+	now := time.Now().Unix()
+	updated, err := s.userDB(uid).NewSession(c).Cols("enabled", "updated_unix_time", "disabled_unix_time", "deleted_unix_time").
+		Where("uid=? AND classification_rule_id=? AND deleted_unix_time=?", uid, ruleID, 0).
+		Update(&models.EmailBillClassificationRule{Enabled: false, UpdatedUnixTime: now, DisabledUnixTime: now, DeletedUnixTime: now})
 	if err != nil {
 		return err
 	}

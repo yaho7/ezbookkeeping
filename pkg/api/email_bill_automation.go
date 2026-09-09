@@ -283,6 +283,18 @@ func (a *EmailBillAutomationApi) ClassificationRuleDisableHandler(c *core.WebCon
 	return true, nil
 }
 
+// ClassificationRuleDeleteHandler soft-deletes one user-owned mapping while preserving audit history.
+func (a *EmailBillAutomationApi) ClassificationRuleDeleteHandler(c *core.WebContext) (any, *errs.Error) {
+	request := emailBillRuleIDRequest{}
+	if err := c.ShouldBindJSON(&request); err != nil {
+		return false, errs.NewIncompleteOrIncorrectSubmissionError(err)
+	}
+	if err := a.service.DeleteClassificationRule(c, c.GetCurrentUid(), request.ID); err != nil {
+		return false, errs.Or(err, errs.ErrOperationFailed)
+	}
+	return true, nil
+}
+
 // MessageListHandler returns recent stored messages that can be loaded into the test bench.
 func (a *EmailBillAutomationApi) MessageListHandler(c *core.WebContext) (any, *errs.Error) {
 	messages, err := a.review.ListMessages(c, c.GetCurrentUid())

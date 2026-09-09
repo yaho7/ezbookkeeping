@@ -497,6 +497,9 @@ export default {
     disableEmailBillClassification: (id: string): ApiResponsePromise<boolean> => {
         return axios.post<ApiResponse<boolean>>('v1/email_bill/classification/disable.json', { id });
     },
+    deleteEmailBillClassification: (id: string): ApiResponsePromise<boolean> => {
+        return axios.post<ApiResponse<boolean>>('v1/email_bill/classification/delete.json', { id });
+    },
     listEmailBillCandidates: (status = ''): ApiResponsePromise<EmailBillCandidate[]> => {
         return axios.get<ApiResponse<EmailBillCandidate[]>>('v1/email_bill/candidates/list.json' + (status ? `?status=${encodeURIComponent(status)}` : ''));
     },

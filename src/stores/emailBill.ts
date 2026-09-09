@@ -76,6 +76,11 @@ export const useEmailBillStore = defineStore('emailBill', () => {
         classifications.value = resultOf(await services.listEmailBillClassifications());
     }
 
+    async function deleteClassification(id: string): Promise<void> {
+        resultOf(await services.deleteEmailBillClassification(id));
+        classifications.value = classifications.value.filter(item => item.id !== id);
+    }
+
     async function reloadCandidates(): Promise<void> {
         candidates.value = resultOf(await services.listEmailBillCandidates()).map(normalizeEmailBillCandidate);
     }
@@ -97,7 +102,7 @@ export const useEmailBillStore = defineStore('emailBill', () => {
     return {
         settings, parsers, messages, routes, classifications, candidates,
         loadAll, saveSettings, saveParser, testParser, disableParser,
-        saveRoute, disableRoute, saveClassification, disableClassification,
+        saveRoute, disableRoute, saveClassification, disableClassification, deleteClassification,
         reloadCandidates, confirmCandidate, retryCandidate, loadAudit
     };
 });

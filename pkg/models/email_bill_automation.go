@@ -237,6 +237,7 @@ type EmailBillClassificationRule struct {
 	CreatedUnixTime      int64
 	UpdatedUnixTime      int64
 	DisabledUnixTime     int64
+	DeletedUnixTime      int64
 }
 
 // EmailBillClassificationRuleVersion snapshots match and category behavior.
