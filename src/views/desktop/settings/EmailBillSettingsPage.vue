@@ -152,12 +152,14 @@
 
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, useTemplateRef } from 'vue';
+import { isAxiosError } from 'axios';
 
 import SnackBar from '@/components/desktop/SnackBar.vue';
 import { useI18n } from '@/locales/helpers.ts';
 import services from '@/lib/services.ts';
 import { buildEmailBillSchedule, createEmailBillParserRule, parseEmailBillSchedule, type EmailBillAuditEvent, type EmailBillCandidate, type EmailBillCandidateVariant, type EmailBillClassificationRule, type EmailBillParserPreview, type EmailBillParserRule, type EmailBillRoutingRule, type EmailBillScheduleMode, type EmailBillSettings } from '@/core/emailBill.ts';
 import type { AccountInfoResponse } from '@/models/account.ts';
+import type { ErrorResponse } from '@/core/api.ts';
 import type { TransactionCategoryInfoResponse } from '@/models/transaction_category.ts';
 import { useEmailBillStore } from '@/stores/emailBill.ts';
 
@@ -281,7 +283,13 @@ function routeSummary(rule: EmailBillRoutingRule): string { return [rule.bank, r
 function formatVariantAmount(item?: EmailBillCandidateVariant): string { return item ? `${(Math.abs(item.amount) / 100).toFixed(2)} ${item.currency}` : '—'; }
 function formatUnix(value: number): string { return value ? new Date(value * 1000).toLocaleString() : '—'; }
 function resultOf<T>(response: { data: { success: boolean; result: T } }): T { if (!response.data?.success) throw new Error('Email bill request failed'); return response.data.result; }
-function showError(error: unknown): void { snackbar.value?.showError(error instanceof Error ? error : String(error)); }
+function showError(error: unknown): void {
+    if (isAxiosError<ErrorResponse>(error) && error.response?.data?.errorMessage) {
+        snackbar.value?.showError({ error: error.response.data });
+        return;
+    }
+    snackbar.value?.showError(error instanceof Error ? error : String(error));
+}
 async function copyParserPrompt(): Promise<void> {
     try {
         await navigator.clipboard.writeText(parserAIPrompt.value);

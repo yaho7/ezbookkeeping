@@ -476,7 +476,7 @@ export default {
         return axios.post<ApiResponse<boolean>>('v1/users/settings/email_bill/test.json', req, { timeout: DEFAULT_LLM_API_TIMEOUT });
     },
     runEmailBillImport: (): ApiResponsePromise<boolean> => {
-        return axios.post<ApiResponse<boolean>>('v1/users/settings/email_bill/run.json');
+        return axios.post<ApiResponse<boolean>>('v1/users/settings/email_bill/run.json', undefined, { timeout: DEFAULT_IMPORT_API_TIMEOUT });
     },
     listEmailBillParsers: (): ApiResponsePromise<EmailBillParserRule[]> => {
         return axios.get<ApiResponse<EmailBillParserRule[]>>('v1/email_bill/parsers/list.json');
