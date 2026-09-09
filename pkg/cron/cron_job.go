@@ -6,6 +6,7 @@ import (
 
 	"github.com/mayswind/ezbookkeeping/pkg/core"
 	"github.com/mayswind/ezbookkeeping/pkg/duplicatechecker"
+	"github.com/mayswind/ezbookkeeping/pkg/errs"
 	"github.com/mayswind/ezbookkeeping/pkg/log"
 	"github.com/mayswind/ezbookkeeping/pkg/utils"
 )
@@ -16,6 +17,9 @@ type CronJob struct {
 	Description string
 	Period      CronJobPeriod
 	Run         func(*core.CronContext) error
+	// ReleaseRunningInfo makes the duplicate marker an execution lock rather
+	// than suppressing further runs until the next scheduled occurrence.
+	ReleaseRunningInfo bool
 }
 
 func (j *CronJob) doRun() {
@@ -37,11 +41,19 @@ func (j *CronJob) run() error {
 		}
 
 		currentInfo := fmt.Sprintf("ip: %s, startTime: %d", localAddr, time.Now().Unix())
-		found, runningInfo := duplicatechecker.Container.GetOrSetCronJobRunningInfo(j.Name, currentInfo, j.Period.GetInterval())
+		interval := j.Period.GetInterval()
+		if j.ReleaseRunningInfo {
+			// The in-memory lock must not expire while an import is still running.
+			interval = -1
+		}
+		found, runningInfo := duplicatechecker.Container.GetOrSetCronJobRunningInfo(j.Name, currentInfo, interval)
 
 		if found {
 			log.Warnf(c, "[cron_job.doRun] job \"%s\" is already running (%s)", j.Name, runningInfo)
-			return fmt.Errorf("cron job %q is already running", j.Name)
+			return errs.ErrSystemIsBusy
+		}
+		if j.ReleaseRunningInfo {
+			defer duplicatechecker.Container.RemoveCronJobRunningInfo(j.Name)
 		}
 	}
 

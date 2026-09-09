@@ -35,8 +35,9 @@ var CreateScheduledTransactionJob = &CronJob{
 // NewEmailBillImportJob returns the built-in email bill importer cron job.
 func NewEmailBillImportJob(cronExpression string, timezone string) *CronJob {
 	return &CronJob{
-		Name:        "ImportEmailBills",
-		Description: "Periodically import supported bank emails into native transactions.",
+		Name:               "ImportEmailBills",
+		Description:        "Periodically import supported bank emails into native transactions.",
+		ReleaseRunningInfo: true,
 		Period: CronJobExpressionPeriod{
 			Expression: fmt.Sprintf("CRON_TZ=%s %s", timezone, cronExpression),
 		},
