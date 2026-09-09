@@ -15,6 +15,7 @@ import (
 )
 
 const defaultIMAPTimeout = 30 * time.Second
+const imapFetchBatchSize = 50
 
 // Mailbox retrieves supported messages from an email account.
 type Mailbox interface {
@@ -82,24 +83,46 @@ func (m *IMAPMailbox) FetchRecent(ctx context.Context) ([]Message, error) {
 		return nil, nil
 	}
 
-	messageDates, err := m.fetchMessageDatesWithinLimit(ctx, imapClient, uids)
-	if err != nil {
-		return nil, err
-	}
-	if len(messageDates) == 0 {
-		return nil, nil
-	}
+	return fetchRecentMessageBatches(ctx, uids, m.config.MaxEmails, func(batch []uint32, remaining uint32) ([]Message, error) {
+		messageDates, err := m.fetchMessageDatesWithinLimit(ctx, imapClient, batch)
+		if err != nil || len(messageDates) == 0 {
+			return nil, err
+		}
+		messageDates, err = m.fetchAuthenticatedHeaders(ctx, imapClient, sortedUIDs(messageDates), messageDates)
+		if err != nil || len(messageDates) == 0 {
+			return nil, err
+		}
+		messageDates = newestMessageDates(messageDates, remaining)
+		return m.fetchAuthenticatedBodies(ctx, imapClient, sortedUIDs(messageDates), messageDates)
+	})
+}
 
-	messageDates, err = m.fetchAuthenticatedHeaders(ctx, imapClient, sortedUIDs(messageDates), messageDates)
-	if err != nil {
-		return nil, err
+// fetchRecentMessageBatches bounds each IMAP command and stops once enough
+// unprocessed messages have been found, even when the inbox contains years of mail.
+func fetchRecentMessageBatches(ctx context.Context, uids []uint32, limit uint32, fetch func([]uint32, uint32) ([]Message, error)) ([]Message, error) {
+	uids = append([]uint32(nil), uids...)
+	sort.Slice(uids, func(i, j int) bool { return uids[i] < uids[j] })
+	var messages []Message
+	for end := len(uids); end > 0; {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		start := max(0, end-imapFetchBatchSize)
+		remaining := uint32(0)
+		if limit > 0 {
+			remaining = limit - uint32(len(messages))
+		}
+		batch, err := fetch(uids[start:end], remaining)
+		if err != nil {
+			return nil, err
+		}
+		messages = append(messages, batch...)
+		if limit > 0 && uint32(len(messages)) >= limit {
+			break
+		}
+		end = start
 	}
-	messageDates = newestMessageDates(messageDates, m.config.MaxEmails)
-	if len(messageDates) == 0 {
-		return nil, nil
-	}
-
-	return m.fetchAuthenticatedBodies(ctx, imapClient, sortedUIDs(messageDates), messageDates)
+	return messages, nil
 }
 
 func (m *IMAPMailbox) openInbox(ctx context.Context) (*client.Client, error) {
@@ -166,9 +189,12 @@ func (m *IMAPMailbox) fetchMessageDatesWithinLimit(ctx context.Context, imapClie
 func (m *IMAPMailbox) fetchAuthenticatedHeaders(ctx context.Context, imapClient *client.Client, uids []uint32, messageDates map[uint32]time.Time) (map[uint32]time.Time, error) {
 	sequenceSet := sequenceSetForUIDs(uids)
 	headerSection := &imap.BodySectionName{
-		BodyPartName: imap.BodyPartName{Specifier: imap.HeaderSpecifier},
-		Peek:         true,
-		Partial:      []int{0, int(m.maxMessageBytes()) + 1},
+		BodyPartName: imap.BodyPartName{
+			Specifier: imap.HeaderSpecifier,
+			Fields:    []string{"From", "Subject", "Message-ID", "Date", "Authentication-Results"},
+		},
+		Peek:    true,
+		Partial: []int{0, int(m.maxMessageBytes()) + 1},
 	}
 	fetched := make(chan *imap.Message)
 	fetchErr := make(chan error, 1)

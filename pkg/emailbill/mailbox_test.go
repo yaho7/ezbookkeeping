@@ -1,6 +1,8 @@
 package emailbill
 
 import (
+	"context"
+	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -8,6 +10,51 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func TestFetchRecentMessageBatchesSkipsEmptyBatchesAndStopsAtLimit(t *testing.T) {
+	uids := make([]uint32, 120)
+	for i := range uids {
+		uids[i] = uint32(i + 1)
+	}
+	var batches [][]uint32
+	var limits []uint32
+	messages, err := fetchRecentMessageBatches(context.Background(), uids, 3, func(batch []uint32, limit uint32) ([]Message, error) {
+		batches = append(batches, batch)
+		limits = append(limits, limit)
+		switch len(batches) {
+		case 1:
+			return nil, nil // Already processed or unmatched mail must not consume the limit.
+		case 2:
+			return []Message{{MessageID: "newest"}, {MessageID: "next"}}, nil
+		default:
+			return []Message{{MessageID: "oldest"}}, nil
+		}
+	})
+	require.NoError(t, err)
+	require.Len(t, messages, 3)
+	require.Len(t, batches, 3)
+	assert.Equal(t, []uint32{3, 3, 1}, limits)
+	assert.Equal(t, uint32(120), batches[0][len(batches[0])-1])
+	assert.Greater(t, batches[0][0], batches[1][len(batches[1])-1])
+	for _, batch := range batches {
+		assert.LessOrEqual(t, len(batch), imapFetchBatchSize)
+	}
+}
+
+func TestFetchRecentMessageBatchesPreservesFailuresAndCancellation(t *testing.T) {
+	want := errors.New("IMAP connection closed")
+	_, err := fetchRecentMessageBatches(context.Background(), []uint32{1}, 1, func([]uint32, uint32) ([]Message, error) {
+		return nil, want
+	})
+	require.ErrorIs(t, err, want)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	_, err = fetchRecentMessageBatches(ctx, []uint32{1}, 1, func([]uint32, uint32) ([]Message, error) {
+		t.Fatal("canceled request must not fetch mail")
+		return nil, nil
+	})
+	require.ErrorIs(t, err, context.Canceled)
+}
 
 func TestDecodeMessageExtractsMultipartTextAndAuthenticatesBank(t *testing.T) {
 	raw := strings.Join([]string{
