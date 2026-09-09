@@ -109,6 +109,12 @@
                 </router-link>
             </li>
             <li class="nav-link">
+                <router-link to="/settings/ai">
+                    <v-icon class="nav-item-icon" :icon="mdiRobotOutline"/>
+                    <span class="nav-item-title">{{ tt('AI Settings') }}</span>
+                </router-link>
+            </li>
+            <li class="nav-link">
                 <router-link to="/settings/email_bill">
                     <v-icon class="nav-item-icon" :icon="mdiEmailOutline"/>
                     <span class="nav-item-title">{{ tt('Email Bill Automation') }}</span>
@@ -145,7 +151,8 @@ import {
     mdiCloudOutline,
     mdiSwapHorizontal,
     mdiDatabaseClockOutline,
-    mdiEmailOutline
+    mdiEmailOutline,
+    mdiRobotOutline
 } from '@mdi/js';
 
 const route = useRoute();

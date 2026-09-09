@@ -24,3 +24,20 @@ func TestConfigContainerUpdateEmailBillConfigUsesCopyOnWrite(t *testing.T) {
 	updatedEmailConfig.MailUser = "mutated@example.com"
 	assert.Equal(t, "alice@qq.com", container.GetCurrentConfig().EmailBillConfig.MailUser)
 }
+
+func TestConfigContainerUpdateTextRecognitionLLMConfigUsesCopyOnWrite(t *testing.T) {
+	originalLLMConfig := &LLMConfig{LLMProvider: OpenAILLMProvider, OpenAIModelID: "gpt-old"}
+	original := &Config{TextRecognitionLLMConfig: originalLLMConfig}
+	container := &ConfigContainer{current: original}
+
+	updatedLLMConfig := &LLMConfig{LLMProvider: OpenAILLMProvider, OpenAIModelID: "gpt-new"}
+	require.NoError(t, container.UpdateTextRecognitionLLMConfig(updatedLLMConfig))
+
+	updated := container.GetCurrentConfig()
+	assert.NotSame(t, original, updated)
+	assert.Same(t, originalLLMConfig, original.TextRecognitionLLMConfig)
+	assert.Equal(t, "gpt-new", updated.TextRecognitionLLMConfig.OpenAIModelID)
+
+	updatedLLMConfig.OpenAIModelID = "mutated"
+	assert.Equal(t, "gpt-new", container.GetCurrentConfig().TextRecognitionLLMConfig.OpenAIModelID)
+}

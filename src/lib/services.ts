@@ -15,6 +15,7 @@ import type {
     EmailBillCandidate,
     EmailBillAuditEvent
 } from '@/core/emailBill.ts';
+import type { LLMSettings } from '@/core/llm.ts';
 import type {
     VersionInfo
 } from '@/core/version.ts';
@@ -454,6 +455,12 @@ export default {
     },
     disableUserApplicationCloudSettings: (): ApiResponsePromise<boolean> => {
         return axios.post<ApiResponse<boolean>>('v1/users/settings/cloud/disable.json');
+    },
+    getLLMSettings: (): ApiResponsePromise<LLMSettings> => {
+        return axios.get<ApiResponse<LLMSettings>>('v1/users/settings/llm/get.json');
+    },
+    updateLLMSettings: (req: LLMSettings): ApiResponsePromise<LLMSettings> => {
+        return axios.post<ApiResponse<LLMSettings>>('v1/users/settings/llm/update.json', req);
     },
     getEmailBillSettings: (): ApiResponsePromise<EmailBillSettings> => {
         return axios.get<ApiResponse<EmailBillSettings>>('v1/users/settings/email_bill/get.json');
