@@ -35,16 +35,45 @@ type emailBillTransactionService interface {
 
 type emailBillMailboxFactory func(*settings.EmailBillConfig, []emailbill.Parser) emailbill.Mailbox
 
+type emailBillAutomationRules interface {
+	RunnableParserRules(core.Context, int64) ([]emailbill.RunnableParserRule, error)
+}
+
+type emailBillPipelineProcessor interface {
+	ProcessMessage(core.Context, int64, int64, EmailBillFetchedMessage, []emailbill.RunnableParserRule) (*EmailBillPipelineResult, error)
+}
+
+type emailBillCandidateFinalizer interface {
+	FinalizeMessage(core.Context, int64, int64, int64, int64) error
+}
+
+type emailBillRawBodyCleaner interface {
+	PurgeRawBodies(core.Context, int64, int64) error
+}
+
 // EmailBillImportService imports supported email notifications into native transactions.
 type EmailBillImportService struct {
 	configProvider emailBillConfigProvider
 	users          emailBillUserService
 	transactions   emailBillTransactionService
 	mailboxFactory emailBillMailboxFactory
+	automation     emailBillAutomationRules
+	pipeline       emailBillPipelineProcessor
+	finalizer      emailBillCandidateFinalizer
+	rawBodies      emailBillRawBodyCleaner
 }
 
 // EmailBillImporter is the built-in email bill importer service.
-var EmailBillImporter = NewEmailBillImportService(settings.Container, Users, Transactions, newEmailBillMailbox)
+var EmailBillImporter = newConfiguredEmailBillImportService()
+
+func newConfiguredEmailBillImportService() *EmailBillImportService {
+	service := NewEmailBillImportService(settings.Container, Users, Transactions, newEmailBillMailbox)
+	service.automation = EmailBillAutomation
+	service.pipeline = NewEmailBillPipeline(EmailBillAutomationStore, emailbill.NewScriptParser(emailbill.ScriptLimits{}))
+	service.finalizer = NewEmailBillFinalizer()
+	service.rawBodies = EmailBillAutomationStore
+	return service
+}
 
 // NewEmailBillImportService creates an email bill importer with injectable dependencies.
 func NewEmailBillImportService(configProvider emailBillConfigProvider, users emailBillUserService, transactions emailBillTransactionService, mailboxFactory emailBillMailboxFactory) *EmailBillImportService {
@@ -71,6 +100,9 @@ func (s *EmailBillImportService) Import(c core.Context) error {
 	location, err := time.LoadLocation(emailConfig.Timezone)
 	if err != nil {
 		return fmt.Errorf("load email bill timezone: %w", err)
+	}
+	if s.automation != nil && s.pipeline != nil {
+		return s.importWithAutomation(c, user.Uid, emailConfig)
 	}
 
 	parsers := []emailbill.Parser{emailbill.NewCMBCreditParser(), emailbill.NewCMBDebitParser()}
@@ -109,6 +141,43 @@ func (s *EmailBillImportService) Import(c core.Context) error {
 				log.Infof(c, "[email_bill_importer.Import] created transaction %d from %s email", transaction.TransactionId, item.Source)
 			}
 			break
+		}
+	}
+	return nil
+}
+
+func (s *EmailBillImportService) importWithAutomation(c core.Context, uid int64, config *settings.EmailBillConfig) error {
+	if s.rawBodies != nil {
+		cutoff := int64(0)
+		if config.RetainRawEmails {
+			cutoff = time.Now().Add(-time.Duration(config.RawEmailRetentionDays) * 24 * time.Hour).Unix()
+		}
+		if err := s.rawBodies.PurgeRawBodies(c, uid, cutoff); err != nil {
+			return fmt.Errorf("purge retained email bodies: %w", err)
+		}
+	}
+	rules, err := s.automation.RunnableParserRules(c, uid)
+	if err != nil {
+		return fmt.Errorf("load email bill parser rules: %w", err)
+	}
+	messages, err := s.mailboxFactory(config, nil).FetchRecent(c)
+	if err != nil {
+		return err
+	}
+	for _, message := range messages {
+		result, processErr := s.pipeline.ProcessMessage(c, uid, uid, EmailBillFetchedMessage{
+			RemoteMessageID: message.MessageID, Sender: message.Sender, Subject: message.Subject,
+			ReceivedAt: message.ReceivedAt, Text: message.Text, Headers: message.Headers,
+			Authenticated: message.Authenticated,
+			RetainBody:    config.RetainRawEmails,
+		}, rules)
+		if processErr != nil {
+			return fmt.Errorf("process email bill %q: %w", message.Fingerprint, processErr)
+		}
+		if s.finalizer != nil && !result.Duplicate {
+			if err = s.finalizer.FinalizeMessage(c, uid, uid, result.MessageID, result.RunID); err != nil {
+				return fmt.Errorf("finalize email bill %q: %w", message.Fingerprint, err)
+			}
 		}
 	}
 	return nil

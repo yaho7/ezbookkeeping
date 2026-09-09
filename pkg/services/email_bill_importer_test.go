@@ -113,6 +113,57 @@ type fakeEmailBillMailbox struct {
 	messages []emailbill.Message
 }
 
+type fakeEmailBillAutomationRules struct {
+	rules []emailbill.RunnableParserRule
+}
+
+func (s *fakeEmailBillAutomationRules) RunnableParserRules(core.Context, int64) ([]emailbill.RunnableParserRule, error) {
+	return s.rules, nil
+}
+
+type fakeEmailBillPipelineProcessor struct {
+	processed []EmailBillFetchedMessage
+}
+
+type fakeEmailBillCandidateFinalizer struct {
+	calls int
+}
+
+func (f *fakeEmailBillCandidateFinalizer) FinalizeMessage(core.Context, int64, int64, int64, int64) error {
+	f.calls++
+	return nil
+}
+
+func (p *fakeEmailBillPipelineProcessor) ProcessMessage(_ core.Context, _, _ int64, message EmailBillFetchedMessage, _ []emailbill.RunnableParserRule) (*EmailBillPipelineResult, error) {
+	p.processed = append(p.processed, message)
+	return &EmailBillPipelineResult{Status: "succeeded"}, nil
+}
+
+func TestEmailBillImporterUsesConfigurableParserPipeline(t *testing.T) {
+	config := &settings.Config{EmailBillConfig: &settings.EmailBillConfig{
+		Enabled: true, TargetUser: "alice", Timezone: "Asia/Shanghai",
+	}}
+	mailbox := &fakeEmailBillMailbox{messages: []emailbill.Message{{
+		MessageID: "<one@example.com>", Sender: "bank@example.com", Subject: "bill", Text: "body",
+		ReceivedAt: time.Date(2026, 9, 8, 8, 0, 0, 0, time.UTC), Authenticated: true,
+	}}}
+	pipeline := &fakeEmailBillPipelineProcessor{}
+	finalizer := &fakeEmailBillCandidateFinalizer{}
+	service := NewEmailBillImportService(
+		&fakeEmailBillConfigProvider{config: config}, &fakeEmailBillUserService{user: &models.User{Uid: 7}},
+		&fakeEmailBillTransactionService{}, func(*settings.EmailBillConfig, []emailbill.Parser) emailbill.Mailbox { return mailbox },
+	)
+	service.automation = &fakeEmailBillAutomationRules{rules: []emailbill.RunnableParserRule{{VersionID: 9}}}
+	service.pipeline = pipeline
+	service.finalizer = finalizer
+
+	err := service.Import(core.NewNullContext())
+	require.NoError(t, err)
+	require.Len(t, pipeline.processed, 1)
+	assert.Equal(t, "<one@example.com>", pipeline.processed[0].RemoteMessageID)
+	assert.Equal(t, 1, finalizer.calls)
+}
+
 func (m *fakeEmailBillMailbox) FetchRecent(context.Context) ([]emailbill.Message, error) {
 	return m.messages, nil
 }

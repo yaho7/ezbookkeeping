@@ -60,6 +60,34 @@ func TestDecodeMessageRejectsUntrustedAuthenticationResults(t *testing.T) {
 	assert.False(t, message.Authenticated)
 }
 
+func TestDecodeMessagePreservesSafeHeadersForUserParsers(t *testing.T) {
+	raw := strings.Join([]string{
+		"From: Bank <bank@example.com>",
+		"To: alice@example.com",
+		"Subject: Monthly card bill",
+		"Message-ID: <bill-42@example.com>",
+		"Date: Tue, 8 Sep 2026 10:00:00 +0800",
+		"Authentication-Results: mx.example.com; dkim=pass header.d=example.com",
+		"Content-Type: text/plain; charset=utf-8",
+		"",
+		"Coffee 12.00 CNY",
+	}, "\r\n")
+
+	message, err := DecodeMessage(strings.NewReader(raw), MessageSecurity{}, time.Time{})
+	require.NoError(t, err)
+
+	assert.Equal(t, "<bill-42@example.com>", message.MessageID)
+	assert.Equal(t, "alice@example.com", message.Headers["to"])
+	assert.Equal(t, "Monthly card bill", message.Headers["subject"])
+	assert.NotContains(t, message.Headers, "authorization")
+}
+
+func TestIMAPMailboxWithoutBuiltInParsersAcceptsMailForUserRules(t *testing.T) {
+	mailbox := NewIMAPMailbox(MailboxConfig{}, nil)
+
+	assert.True(t, mailbox.supported(Message{Sender: "any-bank@example.com", Subject: "any subject"}))
+}
+
 func TestDecodeMessageAcceptsDKIMIdentityDomain(t *testing.T) {
 	raw := strings.Join([]string{
 		"From: 95555@message.cmbchina.com",

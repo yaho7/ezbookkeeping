@@ -241,6 +241,14 @@ func sortedUIDs(messageDates map[uint32]time.Time) []uint32 {
 
 func (m *IMAPMailbox) searchSupportedUIDs(imapClient *client.Client) ([]uint32, error) {
 	unique := make(map[uint32]struct{})
+	if len(m.parsers) == 0 {
+		criteria := imap.NewSearchCriteria()
+		uids, err := imapClient.UidSearch(criteria)
+		if err != nil {
+			return nil, fmt.Errorf("search recent IMAP messages: %w", err)
+		}
+		return newestUIDs(uids, m.config.MaxEmails), nil
+	}
 	for _, parser := range m.parsers {
 		for _, sender := range parser.AllowedSenders() {
 			for _, subject := range parser.SubjectKeywords() {
@@ -275,6 +283,9 @@ func newestUIDs(uids []uint32, limit uint32) []uint32 {
 }
 
 func (m *IMAPMailbox) supported(message Message) bool {
+	if len(m.parsers) == 0 {
+		return true
+	}
 	for _, parser := range m.parsers {
 		if parser.Matches(message.Sender, message.Subject) {
 			return true

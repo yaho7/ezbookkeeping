@@ -13,10 +13,12 @@ const (
 // Message contains the normalized parts of one matching email.
 type Message struct {
 	Fingerprint   string
+	MessageID     string
 	Sender        string
 	Subject       string
 	ReceivedAt    time.Time
 	Text          string
+	Headers       map[string]string
 	Authenticated bool
 }
 

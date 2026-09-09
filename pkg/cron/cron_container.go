@@ -1,6 +1,7 @@
 package cron
 
 import (
+	"sync"
 	"time"
 
 	"github.com/go-co-op/gocron/v2"
@@ -13,6 +14,7 @@ import (
 
 // CronJobSchedulerContainer contains the current cron job scheduler
 type CronJobSchedulerContainer struct {
+	jobUpdateMutex   sync.RWMutex
 	scheduler        gocron.Scheduler
 	allJobs          []*CronJob
 	allJobsMap       map[string]*CronJob
@@ -51,11 +53,16 @@ func InitializeCronJobSchedulerContainer(ctx core.Context, config *settings.Conf
 
 // GetAllJobs returns all the cron jobs
 func (c *CronJobSchedulerContainer) GetAllJobs() []*CronJob {
-	return c.allJobs
+	c.jobUpdateMutex.RLock()
+	defer c.jobUpdateMutex.RUnlock()
+	return append([]*CronJob(nil), c.allJobs...)
 }
 
 // SyncRunJobNow runs the specified cron job synchronously now
 func (c *CronJobSchedulerContainer) SyncRunJobNow(jobName string) error {
+	c.jobUpdateMutex.RLock()
+	defer c.jobUpdateMutex.RUnlock()
+
 	if jobName == "" {
 		return errs.ErrCronJobNameIsEmpty
 	}
@@ -76,6 +83,33 @@ func (c *CronJobSchedulerContainer) SyncRunJobNow(jobName string) error {
 	return nil
 }
 
+// UpdateEmailBillImportJob replaces the email bill schedule, or removes it when disabled.
+func (c *CronJobSchedulerContainer) UpdateEmailBillImportJob(ctx core.Context, config *settings.EmailBillConfig) error {
+	c.jobUpdateMutex.Lock()
+	defer c.jobUpdateMutex.Unlock()
+
+	if oldJob := c.allGocronJobsMap["ImportEmailBills"]; oldJob != nil {
+		if err := c.scheduler.RemoveJob(oldJob.ID()); err != nil {
+			return err
+		}
+	}
+	delete(c.allJobsMap, "ImportEmailBills")
+	delete(c.allGocronJobsMap, "ImportEmailBills")
+
+	remainingJobs := c.allJobs[:0]
+	for _, job := range c.allJobs {
+		if job.Name != "ImportEmailBills" {
+			remainingJobs = append(remainingJobs, job)
+		}
+	}
+	c.allJobs = remainingJobs
+
+	if config == nil || !config.Enabled {
+		return nil
+	}
+	return c.registerIntervalJob(ctx, NewEmailBillImportJob(config.CronExpression, config.Timezone))
+}
+
 func (c *CronJobSchedulerContainer) registerAllJobs(ctx core.Context, config *settings.Config) {
 	if config.EnableRemoveExpiredTokens {
 		c.registerIntervalJob(ctx, RemoveExpiredTokensJob)
@@ -90,7 +124,7 @@ func (c *CronJobSchedulerContainer) registerAllJobs(ctx core.Context, config *se
 	}
 }
 
-func (c *CronJobSchedulerContainer) registerIntervalJob(ctx core.Context, job *CronJob) {
+func (c *CronJobSchedulerContainer) registerIntervalJob(ctx core.Context, job *CronJob) error {
 	gocronJob, err := c.scheduler.NewJob(
 		job.Period.ToJobDefinition(),
 		gocron.NewTask(job.doRun),
@@ -107,4 +141,6 @@ func (c *CronJobSchedulerContainer) registerIntervalJob(ctx core.Context, job *C
 	} else {
 		log.Errorf(ctx, "[cron_container.registerJob] job \"%s\" cannot be been registered, because %s", job.Name, err.Error())
 	}
+
+	return err
 }

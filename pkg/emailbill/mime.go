@@ -82,7 +82,8 @@ func decodeMessage(reader io.Reader, security MessageSecurity, fallbackTime time
 		receivedAt = time.Now()
 	}
 
-	fingerprint := strings.TrimSpace(mailMessage.Header.Get("Message-ID"))
+	messageID := strings.TrimSpace(mailMessage.Header.Get("Message-ID"))
+	fingerprint := messageID
 	if fingerprint == "" {
 		digest := sha256.Sum256([]byte(receivedAt.Format(time.RFC3339Nano) + "\x00" + subject + "\x00" + text))
 		fingerprint = fmt.Sprintf("sha256:%x", digest[:])
@@ -90,12 +91,25 @@ func decodeMessage(reader io.Reader, security MessageSecurity, fallbackTime time
 
 	return Message{
 		Fingerprint:   fingerprint,
+		MessageID:     messageID,
 		Sender:        sender,
 		Subject:       subject,
 		Text:          strings.TrimSpace(text),
+		Headers:       safeParserHeaders(mailMessage.Header),
 		ReceivedAt:    receivedAt,
 		Authenticated: authenticationResultsValid(mailMessage.Header.Get("Authentication-Results"), security),
 	}, nil
+}
+
+func safeParserHeaders(header mail.Header) map[string]string {
+	allowed := []string{"From", "To", "Cc", "Reply-To", "Date", "Subject", "Message-ID", "Authentication-Results"}
+	result := make(map[string]string, len(allowed))
+	for _, key := range allowed {
+		if value := strings.TrimSpace(header.Get(key)); value != "" {
+			result[strings.ToLower(key)] = value
+		}
+	}
+	return result
 }
 
 func decodeMIMEBody(header mail.Header, body io.Reader) (string, error) {

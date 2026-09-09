@@ -114,6 +114,36 @@ func TestCronJobSchedulerContainerRegistersEmailBillImporterWhenEnabled(t *testi
 	assert.Nil(t, scheduler.Shutdown())
 }
 
+func TestCronJobSchedulerContainerUpdatesEmailBillImporter(t *testing.T) {
+	container := &CronJobSchedulerContainer{
+		allJobsMap:       make(map[string]*CronJob),
+		allGocronJobsMap: make(map[string]gocron.Job),
+	}
+	scheduler, err := gocron.NewScheduler()
+	assert.Nil(t, err)
+	container.scheduler = scheduler
+
+	err = container.UpdateEmailBillImportJob(core.NewNullContext(), &settings.EmailBillConfig{
+		Enabled: true, CronExpression: "0 3 * * *", Timezone: "Asia/Shanghai",
+	})
+	assert.Nil(t, err)
+	assert.Len(t, container.GetAllJobs(), 1)
+
+	err = container.UpdateEmailBillImportJob(core.NewNullContext(), &settings.EmailBillConfig{
+		Enabled: true, CronExpression: "30 8 * * 1-5", Timezone: "Asia/Shanghai",
+	})
+	assert.Nil(t, err)
+	assert.Len(t, container.GetAllJobs(), 1)
+	period := container.allJobsMap["ImportEmailBills"].Period.(CronJobExpressionPeriod)
+	assert.Equal(t, "CRON_TZ=Asia/Shanghai 30 8 * * 1-5", period.Expression)
+
+	err = container.UpdateEmailBillImportJob(core.NewNullContext(), &settings.EmailBillConfig{Enabled: false})
+	assert.Nil(t, err)
+	assert.Empty(t, container.GetAllJobs())
+	assert.NotContains(t, container.allJobsMap, "ImportEmailBills")
+	assert.Nil(t, scheduler.Shutdown())
+}
+
 func TestCronJobSchedulerContainerRepeatRun(t *testing.T) {
 	var err error
 

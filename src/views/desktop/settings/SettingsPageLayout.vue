@@ -108,6 +108,12 @@
                     <span class="nav-item-title">{{ tt('Browser Cache Management') }}</span>
                 </router-link>
             </li>
+            <li class="nav-link">
+                <router-link to="/settings/email_bill">
+                    <v-icon class="nav-item-icon" :icon="mdiEmailOutline"/>
+                    <span class="nav-item-title">{{ tt('Email Bill Automation') }}</span>
+                </router-link>
+            </li>
         </template>
 
         <template #content>
@@ -138,7 +144,8 @@ import {
     mdiChartPieOutline,
     mdiCloudOutline,
     mdiSwapHorizontal,
-    mdiDatabaseClockOutline
+    mdiDatabaseClockOutline,
+    mdiEmailOutline
 } from '@mdi/js';
 
 const route = useRoute();

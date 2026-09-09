@@ -261,6 +261,8 @@ type EmailBillConfig struct {
 	MaxMessageBytes              uint32
 	RequireAuthenticationResults bool
 	TrustedAuthservDomains       []string
+	RetainRawEmails              bool
+	RawEmailRetentionDays        uint32
 }
 
 // MinIOConfig represents the MinIO setting config
@@ -329,8 +331,9 @@ type MultiLanguageContentConfig struct {
 // Config represents the global setting config
 type Config struct {
 	// Global
-	Mode        SystemMode
-	WorkingPath string
+	Mode           SystemMode
+	WorkingPath    string
+	ConfigFilePath string
 
 	// Server
 	Protocol Scheme
@@ -520,7 +523,7 @@ func LoadConfiguration(configFilePath string) (*Config, error) {
 		return nil, err
 	}
 
-	config := &Config{}
+	config := &Config{ConfigFilePath: configFilePath}
 	config.WorkingPath, err = getWorkingPath()
 
 	if err != nil {
@@ -1071,8 +1074,80 @@ func loadEmailBillConfiguration(config *Config, configFile *ini.File, sectionNam
 		MaxEmails:                    getConfigItemUint32Value(configFile, sectionName, "max_emails", defaultEmailBillMaxEmails),
 		MaxMessageBytes:              getConfigItemUint32Value(configFile, sectionName, "max_message_bytes", defaultEmailBillMaxMessageBytes),
 		RequireAuthenticationResults: getConfigItemBoolValue(configFile, sectionName, "require_authentication_results", true),
+		RetainRawEmails:              getConfigItemBoolValue(configFile, sectionName, "retain_raw_emails", false),
+		RawEmailRetentionDays:        getConfigItemUint32Value(configFile, sectionName, "raw_email_retention_days", 30),
 	}
 	config.EmailBillConfig = emailBillConfig
+
+	var err error
+	emailBillConfig.CMBCreditAccountID, err = getOptionalConfigItemInt64Value(configFile, sectionName, "cmb_credit_account_id")
+	if err != nil {
+		return err
+	}
+	emailBillConfig.CMBDebitAccountID, err = getOptionalConfigItemInt64Value(configFile, sectionName, "cmb_debit_account_id")
+	if err != nil {
+		return err
+	}
+	emailBillConfig.ExpenseCategoryID, err = getOptionalConfigItemInt64Value(configFile, sectionName, "expense_category_id")
+	if err != nil {
+		return err
+	}
+	emailBillConfig.IncomeCategoryID, err = getOptionalConfigItemInt64Value(configFile, sectionName, "income_category_id")
+	if err != nil {
+		return err
+	}
+
+	trustedDomains := getConfigItemStringValue(configFile, sectionName, "trusted_authserv_domains")
+	for _, domain := range strings.Split(trustedDomains, ",") {
+		domain = strings.ToLower(strings.TrimSpace(domain))
+		if domain != "" {
+			emailBillConfig.TrustedAuthservDomains = append(emailBillConfig.TrustedAuthservDomains, domain)
+		}
+	}
+
+	return NormalizeEmailBillConfiguration(emailBillConfig)
+}
+
+// NormalizeEmailBillConfiguration applies inferred defaults and validates an enabled importer.
+func NormalizeEmailBillConfiguration(emailBillConfig *EmailBillConfig) error {
+	if emailBillConfig == nil {
+		return fmt.Errorf("email bill configuration is required")
+	}
+
+	emailBillConfig.TargetUser = strings.TrimSpace(emailBillConfig.TargetUser)
+	emailBillConfig.IMAPServer = strings.TrimSpace(emailBillConfig.IMAPServer)
+	emailBillConfig.MailUser = strings.TrimSpace(emailBillConfig.MailUser)
+	emailBillConfig.Timezone = strings.TrimSpace(emailBillConfig.Timezone)
+	emailBillConfig.CronExpression = strings.TrimSpace(emailBillConfig.CronExpression)
+	if emailBillConfig.IMAPPort == 0 {
+		emailBillConfig.IMAPPort = defaultEmailBillIMAPPort
+	}
+	if emailBillConfig.Timezone == "" {
+		emailBillConfig.Timezone = "Asia/Shanghai"
+	}
+	if emailBillConfig.CronExpression == "" {
+		emailBillConfig.CronExpression = defaultEmailBillCronExpression
+	}
+	if emailBillConfig.MaxEmails == 0 {
+		emailBillConfig.MaxEmails = defaultEmailBillMaxEmails
+	}
+	if emailBillConfig.MaxMessageBytes == 0 {
+		emailBillConfig.MaxMessageBytes = defaultEmailBillMaxMessageBytes
+	}
+	if emailBillConfig.RawEmailRetentionDays == 0 {
+		emailBillConfig.RawEmailRetentionDays = 30
+	}
+
+	mailDomain := emailDomain(emailBillConfig.MailUser)
+	if emailBillConfig.IMAPServer == "" && mailDomain != "" {
+		emailBillConfig.IMAPServer = defaultIMAPServer(mailDomain)
+	}
+	if len(emailBillConfig.TrustedAuthservDomains) == 0 && mailDomain != "" {
+		emailBillConfig.TrustedAuthservDomains = defaultAuthenticationServiceDomains(mailDomain, emailBillConfig.IMAPServer)
+	}
+	for index, domain := range emailBillConfig.TrustedAuthservDomains {
+		emailBillConfig.TrustedAuthservDomains[index] = strings.ToLower(strings.TrimSpace(domain))
+	}
 
 	if !emailBillConfig.Enabled {
 		return nil
@@ -1091,33 +1166,9 @@ func loadEmailBillConfiguration(config *Config, configFile *ini.File, sectionNam
 			return fmt.Errorf("email bill configuration %s is required", required.name)
 		}
 	}
-
-	mailDomain := emailDomain(emailBillConfig.MailUser)
 	if emailBillConfig.IMAPServer == "" {
-		emailBillConfig.IMAPServer = defaultIMAPServer(mailDomain)
-		if emailBillConfig.IMAPServer == "" {
-			return fmt.Errorf("email bill configuration imap_server is required for %s", mailDomain)
-		}
+		return fmt.Errorf("email bill configuration imap_server is required for %s", mailDomain)
 	}
-
-	var err error
-	emailBillConfig.CMBCreditAccountID, err = getRequiredConfigItemInt64Value(configFile, sectionName, "cmb_credit_account_id")
-	if err != nil {
-		return err
-	}
-	emailBillConfig.CMBDebitAccountID, err = getRequiredConfigItemInt64Value(configFile, sectionName, "cmb_debit_account_id")
-	if err != nil {
-		return err
-	}
-	emailBillConfig.ExpenseCategoryID, err = getRequiredConfigItemInt64Value(configFile, sectionName, "expense_category_id")
-	if err != nil {
-		return err
-	}
-	emailBillConfig.IncomeCategoryID, err = getRequiredConfigItemInt64Value(configFile, sectionName, "income_category_id")
-	if err != nil {
-		return err
-	}
-
 	if emailBillConfig.MaxEmails < 1 {
 		return fmt.Errorf("email bill configuration max_emails must be at least 1")
 	}
@@ -1127,25 +1178,31 @@ func loadEmailBillConfiguration(config *Config, configFile *ini.File, sectionNam
 	if len(strings.Fields(emailBillConfig.CronExpression)) != 5 {
 		return fmt.Errorf("email bill configuration cron_expression must contain five fields")
 	}
-	if _, err = robfigcron.ParseStandard(emailBillConfig.CronExpression); err != nil {
+	if _, err := robfigcron.ParseStandard(emailBillConfig.CronExpression); err != nil {
 		return fmt.Errorf("invalid email bill cron_expression %q: %w", emailBillConfig.CronExpression, err)
 	}
-	if _, err = time.LoadLocation(emailBillConfig.Timezone); err != nil {
+	if _, err := time.LoadLocation(emailBillConfig.Timezone); err != nil {
 		return fmt.Errorf("invalid email bill timezone %q: %w", emailBillConfig.Timezone, err)
 	}
 
-	trustedDomains := getConfigItemStringValue(configFile, sectionName, "trusted_authserv_domains", strings.Join(defaultAuthenticationServiceDomains(mailDomain, emailBillConfig.IMAPServer), ","))
-	for _, domain := range strings.Split(trustedDomains, ",") {
-		domain = strings.ToLower(strings.TrimSpace(domain))
-		if domain != "" {
-			emailBillConfig.TrustedAuthservDomains = append(emailBillConfig.TrustedAuthservDomains, domain)
-		}
-	}
 	if emailBillConfig.RequireAuthenticationResults && len(emailBillConfig.TrustedAuthservDomains) == 0 {
 		return fmt.Errorf("email bill configuration trusted_authserv_domains is required")
 	}
 
 	return nil
+}
+
+func getOptionalConfigItemInt64Value(configFile *ini.File, sectionName string, itemName string) (int64, error) {
+	value := strings.TrimSpace(getConfigItemStringValue(configFile, sectionName, itemName))
+	if value == "" {
+		return 0, nil
+	}
+
+	numericValue, err := strconv.ParseInt(value, 10, 64)
+	if err != nil || numericValue <= 0 {
+		return 0, fmt.Errorf("email bill configuration %s must be a positive integer", itemName)
+	}
+	return numericValue, nil
 }
 
 func defaultAuthenticationServiceDomains(mailDomain string, imapServer string) []string {
