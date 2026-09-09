@@ -71,7 +71,6 @@ func cloneEmailBillConfig(config *EmailBillConfig) *EmailBillConfig {
 	}
 
 	cloned := *config
-	cloned.TrustedAuthservDomains = append([]string(nil), config.TrustedAuthservDomains...)
 	return &cloned
 }
 

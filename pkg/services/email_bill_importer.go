@@ -1,6 +1,7 @@
 package services
 
 import (
+	"context"
 	"crypto/sha256"
 	"fmt"
 	"regexp"
@@ -51,6 +52,10 @@ type emailBillRawBodyCleaner interface {
 	PurgeRawBodies(core.Context, int64, int64) error
 }
 
+type emailBillMessageIdentityStore interface {
+	HasMessageFingerprint(core.Context, int64, int64, string, uint16) (bool, error)
+}
+
 // EmailBillImportService imports supported email notifications into native transactions.
 type EmailBillImportService struct {
 	configProvider emailBillConfigProvider
@@ -61,6 +66,7 @@ type EmailBillImportService struct {
 	pipeline       emailBillPipelineProcessor
 	finalizer      emailBillCandidateFinalizer
 	rawBodies      emailBillRawBodyCleaner
+	messageStore   emailBillMessageIdentityStore
 }
 
 // EmailBillImporter is the built-in email bill importer service.
@@ -72,6 +78,7 @@ func newConfiguredEmailBillImportService() *EmailBillImportService {
 	service.pipeline = NewEmailBillPipeline(EmailBillAutomationStore, emailbill.NewScriptParser(emailbill.ScriptLimits{}))
 	service.finalizer = NewEmailBillFinalizer()
 	service.rawBodies = EmailBillAutomationStore
+	service.messageStore = EmailBillAutomationStore
 	return service
 }
 
@@ -160,7 +167,21 @@ func (s *EmailBillImportService) importWithAutomation(c core.Context, uid int64,
 	if err != nil {
 		return fmt.Errorf("load email bill parser rules: %w", err)
 	}
-	messages, err := s.mailboxFactory(config, nil).FetchRecent(c)
+	mailbox := s.mailboxFactory(config, nil)
+	if filterable, ok := mailbox.(interface{ SetMessageFilter(emailbill.MessageFilter) }); ok && s.messageStore != nil {
+		filterable.SetMessageFilter(func(_ context.Context, message emailbill.Message) (bool, error) {
+			if strings.TrimSpace(message.MessageID) == "" {
+				return true, nil
+			}
+			fingerprint, version := emailbill.MessageFingerprint(emailbill.MessageIdentityInput{
+				MailboxID: uid, MessageID: message.MessageID, Sender: message.Sender, Subject: message.Subject,
+				ReceivedAt: message.ReceivedAt,
+			})
+			exists, lookupErr := s.messageStore.HasMessageFingerprint(c, uid, uid, fingerprint, version)
+			return !exists, lookupErr
+		})
+	}
+	messages, err := mailbox.FetchRecent(c)
 	if err != nil {
 		return err
 	}
@@ -230,11 +251,49 @@ func newEmailBillMailbox(config *settings.EmailBillConfig, parsers []emailbill.P
 		Password:        config.MailPassword,
 		MaxEmails:       config.MaxEmails,
 		MaxMessageBytes: config.MaxMessageBytes,
-		Security: emailbill.MessageSecurity{
-			RequireAuthenticationResults: config.RequireAuthenticationResults,
-			TrustedAuthservDomains:       config.TrustedAuthservDomains,
-		},
+		Security:        automaticEmailBillMessageSecurity(config.MailUser, config.IMAPServer),
 	}, parsers)
+}
+
+func automaticEmailBillMessageSecurity(mailUser, imapServer string) emailbill.MessageSecurity {
+	mailDomain := ""
+	if at := strings.LastIndex(strings.TrimSpace(mailUser), "@"); at >= 0 {
+		mailDomain = strings.ToLower(strings.TrimSpace(mailUser[at+1:]))
+	}
+	knownDomains := map[string][]string{
+		"qq.com": {"qq.com"}, "foxmail.com": {"qq.com"},
+		"163.com": {"163.com"}, "126.com": {"163.com"}, "yeah.net": {"163.com"},
+		"gmail.com":   {"google.com"},
+		"outlook.com": {"outlook.com"}, "hotmail.com": {"outlook.com"}, "live.com": {"outlook.com"},
+	}
+	domains := knownDomains[mailDomain]
+	if len(domains) == 0 {
+		server := strings.ToLower(strings.TrimSpace(imapServer))
+		for domain, trusted := range knownDomains {
+			if server == "imap."+domain || strings.HasSuffix(server, "."+domain) {
+				domains = trusted
+				break
+			}
+		}
+	}
+	if len(domains) == 0 {
+		return emailbill.MessageSecurity{}
+	}
+	return emailbill.MessageSecurity{RequireAuthenticationResults: true, TrustedAuthservDomains: append([]string(nil), domains...)}
+}
+
+// TestConnection validates mailbox access without fetching or importing messages.
+func (s *EmailBillImportService) TestConnection(c core.Context, config *settings.EmailBillConfig) error {
+	if config == nil || strings.TrimSpace(config.IMAPServer) == "" || config.IMAPPort == 0 ||
+		strings.TrimSpace(config.MailUser) == "" || config.MailPassword == "" {
+		return fmt.Errorf("IMAP server, port, user and password are required")
+	}
+	mailbox := s.mailboxFactory(config, nil)
+	tester, ok := mailbox.(interface{ TestConnection(context.Context) error })
+	if !ok {
+		return fmt.Errorf("mailbox connection test is not supported")
+	}
+	return tester.TestConnection(c)
 }
 
 func buildEmailBillTransaction(c core.Context, uid int64, config *settings.EmailBillConfig, parsed emailbill.ParsedTransaction, marker string) *models.Transaction {

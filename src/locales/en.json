@@ -2952,5 +2952,7 @@
     "Open AI Settings": "Open AI Settings",
     "Parser API and AI Prompt": "Parser API and AI Prompt",
     "Copy this prompt when using an external AI. It includes the parser API, output schema, and current email sample.": "Copy this prompt when using an external AI. It includes the parser API, output schema, and current email sample.",
-    "Copy Prompt": "Copy Prompt"
+    "Copy Prompt": "Copy Prompt",
+    "Test Connection": "Test Connection",
+    "Import bank emails through independent parsers, routing rules and auditable classification decisions.": "Import bank emails through independent parsers, routing rules and auditable classification decisions."
 }

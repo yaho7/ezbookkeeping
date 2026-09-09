@@ -92,6 +92,7 @@
                     <v-card-actions class="px-6 pb-5">
                         <v-btn variant="text" :loading="loading" @click="load">{{ tt('Refresh') }}</v-btn>
                         <v-spacer />
+                        <v-btn variant="tonal" :disabled="!settings.provider" :loading="testing" @click="testSettings">{{ tt('Test Connection') }}</v-btn>
                         <v-btn color="primary" type="submit" :loading="saving">{{ tt('Save') }}</v-btn>
                     </v-card-actions>
                 </v-form>
@@ -117,6 +118,7 @@ const snackbar = useTemplateRef<SnackBarType>('snackbar');
 const settings = reactive<LLMSettings>(createLLMSettings());
 const loading = ref(false);
 const saving = ref(false);
+const testing = ref(false);
 
 const providers = computed(() => [
     { title: tt('Disabled'), value: '' },
@@ -167,6 +169,18 @@ async function save(): Promise<void> {
         showError(error);
     } finally {
         saving.value = false;
+    }
+}
+
+async function testSettings(): Promise<void> {
+    testing.value = true;
+    try {
+        resultOf(await services.testLLMSettings({ ...settings }));
+        snackbar.value?.showMessage('Connection test succeeded');
+    } catch (error) {
+        showError(error);
+    } finally {
+        testing.value = false;
     }
 }
 

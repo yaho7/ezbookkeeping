@@ -27,6 +27,13 @@ var EmailBillAutomationStore = &EmailBillAutomationRepository{
 	ServiceUsingUuid: ServiceUsingUuid{container: uuid.Container},
 }
 
+// HasMessageFingerprint reports whether this mailbox identity was already accepted.
+func (r *EmailBillAutomationRepository) HasMessageFingerprint(c core.Context, uid, mailboxID int64, fingerprint string, version uint16) (bool, error) {
+	return r.UserDataDB(uid).NewSession(c).
+		Where("uid=? AND mailbox_id=? AND message_fingerprint=? AND fingerprint_version=?", uid, mailboxID, fingerprint, version).
+		Exist(&models.EmailBillInboundMessage{})
+}
+
 // PurgeRawBodies clears retained message bodies without removing identities or audit evidence.
 func (r *EmailBillAutomationRepository) PurgeRawBodies(c core.Context, uid int64, olderThanUnix int64) error {
 	session := r.UserDataDB(uid).NewSession(c).Where("uid=? AND body_content<>?", uid, "")

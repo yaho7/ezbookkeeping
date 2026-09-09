@@ -2952,5 +2952,7 @@
     "Open AI Settings": "打开 AI 设置",
     "Parser API and AI Prompt": "解析器接口与 AI 提示词",
     "Copy this prompt when using an external AI. It includes the parser API, output schema, and current email sample.": "使用外部 AI 时可复制这段提示词，其中包含解析器接口、输出格式和当前邮件样本。",
-    "Copy Prompt": "复制提示词"
+    "Copy Prompt": "复制提示词",
+    "Test Connection": "测试连接",
+    "Import bank emails through independent parsers, routing rules and auditable classification decisions.": "通过相互独立的解析规则、账户路由和可审计的分类决策导入银行邮件。"
 }

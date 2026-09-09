@@ -103,15 +103,15 @@
                 </router-link>
             </li>
             <li class="nav-link">
-                <router-link to="/settings/browser_cache">
-                    <v-icon class="nav-item-icon" :icon="mdiDatabaseClockOutline"/>
-                    <span class="nav-item-title">{{ tt('Browser Cache Management') }}</span>
-                </router-link>
-            </li>
-            <li class="nav-link">
                 <router-link to="/settings/ai">
                     <v-icon class="nav-item-icon" :icon="mdiRobotOutline"/>
                     <span class="nav-item-title">{{ tt('AI Settings') }}</span>
+                </router-link>
+            </li>
+            <li class="nav-link">
+                <router-link to="/settings/browser_cache">
+                    <v-icon class="nav-item-icon" :icon="mdiDatabaseClockOutline"/>
+                    <span class="nav-item-title">{{ tt('Browser Cache Management') }}</span>
                 </router-link>
             </li>
             <li class="nav-link">

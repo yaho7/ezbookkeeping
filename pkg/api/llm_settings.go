@@ -1,13 +1,17 @@
 package api
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/url"
+	"reflect"
 	"strings"
 
 	"github.com/mayswind/ezbookkeeping/pkg/core"
 	"github.com/mayswind/ezbookkeeping/pkg/errs"
 	"github.com/mayswind/ezbookkeeping/pkg/llm"
+	"github.com/mayswind/ezbookkeeping/pkg/llm/data"
+	llmprovider "github.com/mayswind/ezbookkeeping/pkg/llm/provider"
 	"github.com/mayswind/ezbookkeeping/pkg/log"
 	"github.com/mayswind/ezbookkeeping/pkg/models"
 	"github.com/mayswind/ezbookkeeping/pkg/settings"
@@ -58,6 +62,59 @@ func (a *LLMSettingsApi) UpdateHandler(c *core.WebContext) (any, *errs.Error) {
 		return false, errs.Or(err, errs.ErrOperationFailed)
 	}
 	return textRecognitionLLMSettingsResponse(llmConfig), nil
+}
+
+// TestHandler tests the submitted settings without saving or replacing the active provider.
+func (a *LLMSettingsApi) TestHandler(c *core.WebContext) (any, *errs.Error) {
+	request := &models.LLMSettingsUpdateRequest{}
+	if err := c.ShouldBindJSON(request); err != nil {
+		return false, errs.NewIncompleteOrIncorrectSubmissionError(err)
+	}
+	currentConfig := a.container.GetCurrentConfig()
+	if currentConfig == nil {
+		return false, errs.ErrOperationFailed
+	}
+	llmConfig, err := buildTextRecognitionLLMConfig(request, currentConfig.TextRecognitionLLMConfig)
+	if err != nil || llmConfig.LLMProvider == "" {
+		if err == nil {
+			err = fmt.Errorf("LLM provider is required")
+		}
+		return false, errs.NewIncompleteOrIncorrectSubmissionError(err)
+	}
+	provider, err := llm.NewLargeLanguageModelProvider(llmConfig, currentConfig.EnableDebugLog)
+	if err != nil {
+		return false, errs.NewIncompleteOrIncorrectSubmissionError(err)
+	}
+	if err = testTextRecognitionLLM(c, c.GetCurrentUid(), llmConfig, provider); err != nil {
+		return false, errs.Or(err, errs.ErrOperationFailed)
+	}
+	return true, nil
+}
+
+type llmSettingsTestResponse struct {
+	Status string `json:"status"`
+}
+
+func testTextRecognitionLLM(c core.Context, uid int64, config *settings.LLMConfig, provider llmprovider.LargeLanguageModelProvider) error {
+	response, err := provider.GetJsonResponse(c, uid, config, &data.LargeLanguageModelRequest{
+		Stream: false, SystemPrompt: `Return exactly one JSON object: {"status":"ok"}.`,
+		UserPrompt: []byte("Connection test"), UserPromptType: data.LARGE_LANGUAGE_MODEL_REQUEST_PROMPT_TYPE_TEXT,
+		ResponseJsonObjectType: reflect.TypeOf(llmSettingsTestResponse{}),
+	})
+	if err != nil {
+		return err
+	}
+	if response == nil {
+		return fmt.Errorf("LLM returned an empty response")
+	}
+	result := llmSettingsTestResponse{}
+	if err = json.Unmarshal([]byte(response.Content), &result); err != nil {
+		return fmt.Errorf("invalid LLM test response: %w", err)
+	}
+	if result.Status != "ok" {
+		return fmt.Errorf("unexpected LLM test status %q", result.Status)
+	}
+	return nil
 }
 
 func buildTextRecognitionLLMConfig(request *models.LLMSettingsUpdateRequest, current *settings.LLMConfig) (*settings.LLMConfig, error) {

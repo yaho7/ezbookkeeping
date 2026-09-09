@@ -6,9 +6,20 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/mayswind/ezbookkeeping/pkg/core"
+	"github.com/mayswind/ezbookkeeping/pkg/llm/data"
 	"github.com/mayswind/ezbookkeeping/pkg/models"
 	"github.com/mayswind/ezbookkeeping/pkg/settings"
 )
+
+type fakeLLMTestProvider struct {
+	content string
+	err     error
+}
+
+func (p *fakeLLMTestProvider) GetJsonResponse(core.Context, int64, *settings.LLMConfig, *data.LargeLanguageModelRequest) (*data.LargeLanguageModelTextualResponse, error) {
+	return &data.LargeLanguageModelTextualResponse{Content: p.content}, p.err
+}
 
 func TestBuildTextRecognitionLLMConfigPreservesBlankSecret(t *testing.T) {
 	current := &settings.LLMConfig{
@@ -57,4 +68,16 @@ func TestLLMSettingsResponseRedactsSecret(t *testing.T) {
 
 	assert.True(t, response.APIKeyConfigured)
 	assert.Equal(t, "gemini", response.ModelID)
+}
+
+func TestTextRecognitionLLMConnectionAcceptsExpectedResponse(t *testing.T) {
+	err := testTextRecognitionLLM(core.NewNullContext(), 7, &settings.LLMConfig{}, &fakeLLMTestProvider{content: `{"status":"ok"}`})
+
+	require.NoError(t, err)
+}
+
+func TestTextRecognitionLLMConnectionRejectsUnexpectedResponse(t *testing.T) {
+	err := testTextRecognitionLLM(core.NewNullContext(), 7, &settings.LLMConfig{}, &fakeLLMTestProvider{content: `{"status":"maybe"}`})
+
+	require.ErrorContains(t, err, "unexpected")
 }

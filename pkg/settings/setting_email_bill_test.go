@@ -12,25 +12,23 @@ import (
 
 func TestSaveEmailBillConfigurationPreservesOtherSections(t *testing.T) {
 	configPath := filepath.Join(t.TempDir(), "ezbookkeeping.ini")
-	require.NoError(t, os.WriteFile(configPath, []byte("[server]\nhttp_port = 8080\n\n[email_bill]\nenabled = false\n"), 0o600))
+	require.NoError(t, os.WriteFile(configPath, []byte("[server]\nhttp_port = 8080\n\n[email_bill]\nenabled = false\nrequire_authentication_results = true\ntrusted_authserv_domains = qq.com\n"), 0o600))
 
 	emailConfig := &EmailBillConfig{
-		Enabled:                      true,
-		TargetUser:                   "alice",
-		IMAPServer:                   "imap.qq.com",
-		IMAPPort:                     993,
-		MailUser:                     "alice@qq.com",
-		MailPassword:                 "app-password",
-		CMBCreditAccountID:           101,
-		CMBDebitAccountID:            102,
-		ExpenseCategoryID:            201,
-		IncomeCategoryID:             202,
-		Timezone:                     "Asia/Shanghai",
-		CronExpression:               "30 8 * * 1-5",
-		MaxEmails:                    60,
-		MaxMessageBytes:              2 * 1024 * 1024,
-		RequireAuthenticationResults: true,
-		TrustedAuthservDomains:       []string{"qq.com"},
+		Enabled:            true,
+		TargetUser:         "alice",
+		IMAPServer:         "imap.qq.com",
+		IMAPPort:           993,
+		MailUser:           "alice@qq.com",
+		MailPassword:       "app-password",
+		CMBCreditAccountID: 101,
+		CMBDebitAccountID:  102,
+		ExpenseCategoryID:  201,
+		IncomeCategoryID:   202,
+		Timezone:           "Asia/Shanghai",
+		CronExpression:     "30 8 * * 1-5",
+		MaxEmails:          60,
+		MaxMessageBytes:    2 * 1024 * 1024,
 	}
 
 	require.NoError(t, SaveEmailBillConfiguration(configPath, emailConfig))
@@ -42,7 +40,8 @@ func TestSaveEmailBillConfigurationPreservesOtherSections(t *testing.T) {
 	assert.Equal(t, "alice", configFile.Section("email_bill").Key("target_user").String())
 	assert.Equal(t, "app-password", configFile.Section("email_bill").Key("mail_password").String())
 	assert.Equal(t, "30 8 * * 1-5", configFile.Section("email_bill").Key("cron_expression").String())
-	assert.Equal(t, "qq.com", configFile.Section("email_bill").Key("trusted_authserv_domains").String())
+	assert.False(t, configFile.Section("email_bill").HasKey("require_authentication_results"))
+	assert.False(t, configFile.Section("email_bill").HasKey("trusted_authserv_domains"))
 
 	fileInfo, err := os.Stat(configPath)
 	require.NoError(t, err)
@@ -87,8 +86,6 @@ income_category_id = 202
 	assert.Equal(t, "0 3 * * *", actual.CronExpression)
 	assert.Equal(t, uint32(60), actual.MaxEmails)
 	assert.Equal(t, uint32(2*1024*1024), actual.MaxMessageBytes)
-	assert.True(t, actual.RequireAuthenticationResults)
-	assert.Equal(t, []string{"qq.com"}, actual.TrustedAuthservDomains)
 	assert.Equal(t, int64(101), actual.CMBCreditAccountID)
 	assert.Equal(t, int64(202), actual.IncomeCategoryID)
 }
@@ -131,12 +128,6 @@ cron_expression = CRON_TZ=UTC 0 3 * * *
 	require.ErrorContains(t, err, "five fields")
 }
 
-func TestDefaultAuthenticationServiceDomains(t *testing.T) {
-	assert.Equal(t, []string{"google.com"}, defaultAuthenticationServiceDomains("gmail.com", "imap.gmail.com"))
-	assert.Equal(t, []string{"outlook.com"}, defaultAuthenticationServiceDomains("hotmail.com", "outlook.office365.com"))
-	assert.Equal(t, []string{"imap.example.com"}, defaultAuthenticationServiceDomains("example.com", "imap.example.com"))
-}
-
 func TestLoadEmailBillConfigurationRejectsMissingRequiredValue(t *testing.T) {
 	configFile, err := ini.Load([]byte(`[email_bill]
 enabled = true
@@ -154,7 +145,6 @@ func TestNormalizeEmailBillConfigurationDoesNotRequireFixedMappings(t *testing.T
 		Enabled: true, TargetUser: "alice", IMAPServer: "imap.example.com", IMAPPort: 993,
 		MailUser: "alice@example.com", MailPassword: "secret", Timezone: "Asia/Shanghai",
 		CronExpression: "30 8 * * 1-5", MaxEmails: 60, MaxMessageBytes: 2 * 1024 * 1024,
-		RequireAuthenticationResults: true, TrustedAuthservDomains: []string{"example.com"},
 	}
 
 	assert.NoError(t, NormalizeEmailBillConfiguration(config))

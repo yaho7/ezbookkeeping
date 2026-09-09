@@ -16,12 +16,16 @@ import (
 type EmailBillSettingsApi struct {
 	container *settings.ConfigContainer
 	users     *services.UserService
+	importer  interface {
+		TestConnection(core.Context, *settings.EmailBillConfig) error
+	}
 }
 
 // EmailBillSettings is the email bill settings api singleton.
 var EmailBillSettings = &EmailBillSettingsApi{
 	container: settings.Container,
 	users:     services.Users,
+	importer:  services.EmailBillImporter,
 }
 
 // GetHandler returns email bill settings without exposing the mailbox password.
@@ -97,6 +101,33 @@ func (a *EmailBillSettingsApi) RunHandler(c *core.WebContext) (any, *errs.Error)
 	return true, nil
 }
 
+// TestHandler verifies submitted IMAP settings without importing messages.
+func (a *EmailBillSettingsApi) TestHandler(c *core.WebContext) (any, *errs.Error) {
+	request := &models.EmailBillSettingsUpdateRequest{}
+	if err := c.ShouldBindJSON(request); err != nil {
+		return false, errs.NewIncompleteOrIncorrectSubmissionError(err)
+	}
+	user, err := a.users.GetUserById(c, c.GetCurrentUid())
+	if err != nil {
+		return false, errs.Or(err, errs.ErrUserNotFound)
+	}
+	currentConfig := a.container.GetCurrentConfig()
+	if currentConfig == nil {
+		return false, errs.ErrOperationFailed
+	}
+	if currentConfig.EmailBillConfig != nil && currentConfig.EmailBillConfig.TargetUser != "" && currentConfig.EmailBillConfig.TargetUser != user.Username {
+		return false, errs.ErrNotPermittedToPerformThisAction
+	}
+	emailConfig, err := buildEmailBillConfig(user.Username, request, currentConfig.EmailBillConfig)
+	if err != nil {
+		return false, errs.NewIncompleteOrIncorrectSubmissionError(err)
+	}
+	if err = a.importer.TestConnection(c, emailConfig); err != nil {
+		return false, errs.Or(err, errs.ErrOperationFailed)
+	}
+	return true, nil
+}
+
 func buildEmailBillConfig(username string, request *models.EmailBillSettingsUpdateRequest, current *settings.EmailBillConfig) (*settings.EmailBillConfig, error) {
 	password := strings.TrimSpace(request.MailPassword)
 	maxMessageBytes := uint32(2 * 1024 * 1024)
@@ -110,37 +141,33 @@ func buildEmailBillConfig(username string, request *models.EmailBillSettingsUpda
 	}
 
 	config := &settings.EmailBillConfig{
-		Enabled:                      request.Enabled,
-		TargetUser:                   username,
-		IMAPServer:                   request.IMAPServer,
-		IMAPPort:                     request.IMAPPort,
-		MailUser:                     request.MailUser,
-		MailPassword:                 password,
-		Timezone:                     request.Timezone,
-		CronExpression:               request.CronExpression,
-		MaxEmails:                    request.MaxEmails,
-		MaxMessageBytes:              maxMessageBytes,
-		RequireAuthenticationResults: request.RequireAuthenticationResults,
-		TrustedAuthservDomains:       append([]string(nil), request.TrustedAuthservDomains...),
-		RetainRawEmails:              request.RetainRawEmails,
-		RawEmailRetentionDays:        request.RawEmailRetentionDays,
+		Enabled:               request.Enabled,
+		TargetUser:            username,
+		IMAPServer:            request.IMAPServer,
+		IMAPPort:              request.IMAPPort,
+		MailUser:              request.MailUser,
+		MailPassword:          password,
+		Timezone:              request.Timezone,
+		CronExpression:        request.CronExpression,
+		MaxEmails:             request.MaxEmails,
+		MaxMessageBytes:       maxMessageBytes,
+		RetainRawEmails:       request.RetainRawEmails,
+		RawEmailRetentionDays: request.RawEmailRetentionDays,
 	}
 	return config, settings.NormalizeEmailBillConfiguration(config)
 }
 
 func emailBillSettingsResponse(config *settings.EmailBillConfig) *models.EmailBillSettingsResponse {
 	return &models.EmailBillSettingsResponse{
-		Enabled:                      config.Enabled,
-		IMAPServer:                   config.IMAPServer,
-		IMAPPort:                     config.IMAPPort,
-		MailUser:                     config.MailUser,
-		PasswordConfigured:           config.MailPassword != "",
-		Timezone:                     config.Timezone,
-		CronExpression:               config.CronExpression,
-		MaxEmails:                    config.MaxEmails,
-		RequireAuthenticationResults: config.RequireAuthenticationResults,
-		TrustedAuthservDomains:       append([]string(nil), config.TrustedAuthservDomains...),
-		RetainRawEmails:              config.RetainRawEmails,
-		RawEmailRetentionDays:        config.RawEmailRetentionDays,
+		Enabled:               config.Enabled,
+		IMAPServer:            config.IMAPServer,
+		IMAPPort:              config.IMAPPort,
+		MailUser:              config.MailUser,
+		PasswordConfigured:    config.MailPassword != "",
+		Timezone:              config.Timezone,
+		CronExpression:        config.CronExpression,
+		MaxEmails:             config.MaxEmails,
+		RetainRawEmails:       config.RetainRawEmails,
+		RawEmailRetentionDays: config.RawEmailRetentionDays,
 	}
 }
