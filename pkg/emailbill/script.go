@@ -3,6 +3,7 @@ package emailbill
 import (
 	"crypto/sha256"
 	"fmt"
+	"net/mail"
 	"regexp"
 	"strconv"
 	"strings"
@@ -39,7 +40,7 @@ func (m ParserMatcher) Matches(mail ScriptMail) bool {
 	if len(m.Senders) > 0 {
 		matched := false
 		for _, sender := range m.Senders {
-			if strings.EqualFold(strings.TrimSpace(sender), strings.TrimSpace(mail.Sender)) {
+			if strings.EqualFold(normalizedEmailAddress(sender), normalizedEmailAddress(mail.Sender)) {
 				matched = true
 				break
 			}
@@ -61,6 +62,14 @@ func (m ParserMatcher) Matches(mail ScriptMail) bool {
 		}
 	}
 	return true
+}
+
+func normalizedEmailAddress(value string) string {
+	value = strings.TrimSpace(value)
+	if address, err := mail.ParseAddress(value); err == nil {
+		return strings.ToLower(strings.TrimSpace(address.Address))
+	}
+	return strings.ToLower(value)
 }
 
 // ScriptLimits bounds source, execution, and output resource consumption.
@@ -113,8 +122,9 @@ func (p *ScriptParser) Parse(source string, mail ScriptMail) ([]StandardBill, Sc
 	defer timer.Stop()
 
 	predeclared := starlark.StringDict{
-		"regex_find": starlark.NewBuiltin("regex_find", scriptRegexFind),
-		"sha256":     starlark.NewBuiltin("sha256", scriptSHA256),
+		"regex_find":    starlark.NewBuiltin("regex_find", scriptRegexFind),
+		"sha256":        starlark.NewBuiltin("sha256", scriptSHA256),
+		"parse_builtin": starlark.NewBuiltin("parse_builtin", scriptParseBuiltin),
 	}
 	globals, err := starlark.ExecFile(thread, "parser.star", source, predeclared)
 	if err != nil {
@@ -334,4 +344,71 @@ func scriptSHA256(_ *starlark.Thread, _ *starlark.Builtin, args starlark.Tuple, 
 	}
 	digest := sha256.Sum256([]byte(value))
 	return starlark.String(fmt.Sprintf("%x", digest[:])), nil
+}
+
+func scriptParseBuiltin(_ *starlark.Thread, _ *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
+	var parserName string
+	var mailValue *starlark.Dict
+	if err := starlark.UnpackArgs("parse_builtin", args, kwargs, "name", &parserName, "mail", &mailValue); err != nil {
+		return nil, err
+	}
+	var parser Parser
+	var bank, kind string
+	switch parserName {
+	case "cmb_credit":
+		parser, bank, kind = NewCMBCreditParser(), "cmb", "credit"
+	case "cmb_debit":
+		parser, bank, kind = NewCMBDebitParser(), "cmb", "debit"
+	default:
+		return nil, fmt.Errorf("unsupported built-in parser %q", parserName)
+	}
+	text, err := dictString(mailValue, "text", true)
+	if err != nil {
+		return nil, err
+	}
+	receivedText, err := dictString(mailValue, "received_at", true)
+	if err != nil {
+		return nil, err
+	}
+	receivedAt, err := time.Parse(time.RFC3339, receivedText)
+	if err != nil {
+		return nil, fmt.Errorf("received_at: %w", err)
+	}
+	transactions, err := parser.Parse(text, receivedAt)
+	if err != nil {
+		return nil, err
+	}
+	items := make([]starlark.Value, 0, len(transactions))
+	for _, transaction := range transactions {
+		items = append(items, parsedTransactionValue(transaction, bank, kind))
+	}
+	return starlark.NewList(items), nil
+}
+
+func parsedTransactionValue(transaction ParsedTransaction, bank, kind string) starlark.Value {
+	amount := transaction.AmountMinor
+	flowType := "income"
+	if amount < 0 {
+		amount = -amount
+		flowType = "expense"
+	} else if transaction.Source == SourceCMBCredit {
+		flowType = "refund"
+	}
+	hint := starlark.NewDict(2)
+	_ = hint.SetKey(starlark.String("bank"), starlark.String(bank))
+	_ = hint.SetKey(starlark.String("kind"), starlark.String(kind))
+	bill := starlark.NewDict(7)
+	values := map[string]string{
+		"occurred_at": transaction.OccurredAt.Format(time.RFC3339),
+		"amount":      fmt.Sprintf("%d.%02d", amount/100, amount%100),
+		"currency":    "CNY",
+		"flow_type":   flowType,
+		"merchant":    transaction.Merchant,
+		"description": transaction.Description,
+	}
+	for key, value := range values {
+		_ = bill.SetKey(starlark.String(key), starlark.String(value))
+	}
+	_ = bill.SetKey(starlark.String("account_hint"), hint)
+	return bill
 }

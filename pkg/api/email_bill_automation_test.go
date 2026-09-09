@@ -15,13 +15,14 @@ import (
 func TestEmailBillParserRuleResponseUsesStringIDsAndVersion(t *testing.T) {
 	response := emailBillParserRuleResponse(&services.EmailBillParserRuleInfo{
 		Rule:    &models.EmailBillParserRule{ParserRuleId: 9007199254740993, Name: "bank", Enabled: true, CurrentVersionId: 8},
-		Version: &models.EmailBillParserRuleVersion{ParserRuleVersionId: 8, Version: 3, MatcherJson: `{}`, SourceCode: "def parse(mail): return []"},
+		Version: &models.EmailBillParserRuleVersion{ParserRuleVersionId: 8, Version: 3, MatcherJson: `{}`, SourceCode: "def parse(mail): return []", CreatedBy: "preset:cmb_credit"},
 	})
 	raw, err := json.Marshal(response)
 	require.NoError(t, err)
 
 	assert.Contains(t, string(raw), `"id":"9007199254740993"`)
 	assert.Contains(t, string(raw), `"version":3`)
+	assert.Contains(t, string(raw), `"createdBy":"preset:cmb_credit"`)
 	assert.NotContains(t, string(raw), `currentVersionId`)
 }
 

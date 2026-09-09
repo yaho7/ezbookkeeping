@@ -2945,5 +2945,6 @@
     "Skip TLS Verification": "跳过 TLS 证书验证",
     "OpenAI Compatible": "OpenAI 兼容接口",
     "OpenAI Responses Compatible": "OpenAI Responses 兼容接口",
-    "Anthropic Compatible": "Anthropic 兼容接口"
+    "Anthropic Compatible": "Anthropic 兼容接口",
+    "Preset": "预置"
 }

@@ -61,6 +61,7 @@ type emailBillParserRuleInfoResponse struct {
 	Matcher         emailbill.ParserMatcher `json:"matcher"`
 	SourceCode      string                  `json:"sourceCode"`
 	RuntimeVersion  string                  `json:"runtimeVersion"`
+	CreatedBy       string                  `json:"createdBy"`
 	UpdatedUnixTime int64                   `json:"updatedUnixTime"`
 }
 
@@ -403,6 +404,7 @@ func emailBillParserRuleResponse(info *services.EmailBillParserRuleInfo) *emailB
 		Enabled: info.Rule.Enabled, Priority: info.Rule.Priority,
 		VersionID: strconv.FormatInt(info.Version.ParserRuleVersionId, 10), Version: info.Version.Version,
 		Matcher: matcher, SourceCode: info.Version.SourceCode, RuntimeVersion: info.Version.RuntimeVersion,
+		CreatedBy:       info.Version.CreatedBy,
 		UpdatedUnixTime: info.Rule.UpdatedUnixTime,
 	}
 }

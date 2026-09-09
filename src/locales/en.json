@@ -2945,5 +2945,6 @@
     "Skip TLS Verification": "Skip TLS Verification",
     "OpenAI Compatible": "OpenAI Compatible",
     "OpenAI Responses Compatible": "OpenAI Responses Compatible",
-    "Anthropic Compatible": "Anthropic Compatible"
+    "Anthropic Compatible": "Anthropic Compatible",
+    "Preset": "Preset"
 }

@@ -67,7 +67,7 @@
                             <thead><tr><th>{{ tt('Name') }}</th><th>{{ tt('Bank') }}</th><th>{{ tt('Priority') }}</th><th>{{ tt('Status') }}</th><th class="text-right">{{ tt('Actions') }}</th></tr></thead>
                             <tbody>
                                 <tr v-for="rule in store.parsers" :key="rule.id">
-                                    <td>{{ rule.name }}</td><td>{{ rule.bank || '—' }}</td><td>{{ rule.priority }}</td>
+                                    <td>{{ rule.name }} <v-chip v-if="rule.createdBy.startsWith('preset:')" class="ml-2" size="x-small" variant="tonal">{{ tt('Preset') }}</v-chip></td><td>{{ rule.bank || '—' }}</td><td>{{ rule.priority }}</td>
                                     <td><v-chip size="small" :color="rule.enabled ? 'success' : undefined" variant="tonal">{{ rule.enabled ? tt('Enabled') : tt('Disabled') }}</v-chip></td>
                                     <td class="text-right"><v-btn size="small" variant="text" @click="openParser(rule)">{{ tt('Edit') }}</v-btn><v-btn v-if="rule.enabled" size="small" color="error" variant="text" @click="disableParser(rule.id)">{{ tt('Disable') }}</v-btn></td>
                                 </tr>
