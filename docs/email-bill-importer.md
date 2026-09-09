@@ -37,7 +37,101 @@ docker compose up -d
 
 可以点击“立即执行”手动拉取，也可以等待保存的计划执行。
 
+### 全局 AI 设置
+
+语言模型不在邮件自动记账中单独配置。打开 **设置 → 应用设置 → AI 设置**，选择供应商并填写模型、API 地址和密钥。这里保存的是 ezBookkeeping 全局文本识别模型，原有 AI 功能、账单分类回退以及解析规则生成共用这份配置。
+
+密钥不会通过读取接口返回；页面留空保存会保留现有密钥。要停用全局 AI，将供应商改为“禁用”并保存。
+
 ## 解析规则与测试台
+
+解析规则编辑器可以选择一封已保留的邮件，也可以直接粘贴发件人、主题和正文。点击“使用 AI 生成”后，服务端会调用全局 AI 设置，生成一份未保存的规则草稿，并立即在受限沙箱中运行：只有规则能匹配样本且至少解析出一笔标准账单时，草稿才会填入编辑器。用户仍需检查预览并手动保存，生成操作不会入账。
+
+### 解析器 API
+
+解析代码使用 Starlark，必须定义：
+
+```python
+def parse(mail):
+    return []
+```
+
+`mail` 是只读字典：
+
+| 字段 | 类型 | 含义 |
+| --- | --- | --- |
+| `message_id` | string | 邮件 Message-ID |
+| `sender` | string | 发件人 |
+| `subject` | string | 主题 |
+| `received_at` | string | RFC3339 收件时间 |
+| `text` | string | 纯文本正文 |
+| `headers` | dict | 已允许传入的邮件头，键为小写 |
+
+沙箱只提供三个纯函数：
+
+- `regex_find(text, pattern)`：返回第一个捕获组；没有捕获组时返回完整匹配；未命中返回空字符串。
+- `sha256(value)`：返回小写十六进制 SHA-256。
+- `parse_builtin(name, mail)`：调用维护在 ezBookkeeping 内的解析器；目前支持 `cmb_credit` 和 `cmb_debit`。
+
+每笔标准账单是一个字典，必填字段为：
+
+- `occurred_at`：RFC3339 时间；
+- `amount`：正数十进制字符串，例如 `"38.50"`；
+- `currency`：三字母币种，例如 `"CNY"`；
+- `flow_type`：`expense`、`income`、`refund`、`transfer_in` 或 `transfer_out`。
+
+可选字段为 `external_id`、`merchant`、`description`，以及 `account_hint` 字典中的 `bank`、`kind`、`last4`。解析器不能导入模块，也不能访问网络、文件、数据库、环境变量或 ezBookkeeping 内部服务。
+
+招行信用卡预置规则示例：
+
+```python
+def parse(mail):
+    return parse_builtin("cmb_credit", mail)
+```
+
+通用规则示例：
+
+```python
+def parse(mail):
+    amount = regex_find(mail["text"], r"金额[:：]\s*([0-9]+(?:\.[0-9]{1,2})?)")
+    if not amount:
+        return []
+    return [{
+        "external_id": sha256(mail["message_id"] + amount),
+        "occurred_at": mail["received_at"],
+        "amount": amount,
+        "currency": "CNY",
+        "flow_type": "expense",
+        "merchant": "待确认商户",
+        "description": mail["subject"],
+        "account_hint": {"bank": "example", "kind": "debit"},
+    }]
+```
+
+### HTTP 接口
+
+所有接口都需要当前 ezBookkeeping 登录凭据：
+
+- `POST /api/v1/email_bill/parsers/test.json`：测试 matcher、sourceCode 和 mail，不保存、不入账。
+- `POST /api/v1/email_bill/parsers/generate.json`：使用全局 AI 从 mail 生成草稿，服务端自测后返回。
+- `POST /api/v1/email_bill/parsers/save.json`：用户确认后保存规则新版本。
+
+生成请求示例：
+
+```json
+{
+  "mail": {
+    "messageId": "<sample@example.com>",
+    "sender": "notice@bank.example",
+    "subject": "交易通知",
+    "receivedAt": "2026-09-09T08:30:00+08:00",
+    "text": "您于09月09日消费人民币38.50元",
+    "headers": {}
+  }
+}
+```
+
+设置页的“解析器接口与 AI 提示词”会根据当前邮件样本生成可复制的完整提示词，可直接交给外部 AI；返回的 `sourceCode` 仍应先放入测试台验证。
 
 解析代码必须定义 `parse(mail)`，返回标准账单列表。示例：
 

@@ -56,6 +56,14 @@ export interface EmailBillParserPreview {
     }>;
 }
 
+export interface EmailBillGeneratedParser {
+    name: string;
+    bank: string;
+    matcher: EmailBillMatcher;
+    sourceCode: string;
+    preview: EmailBillParserPreview;
+}
+
 export interface EmailBillRoutingRule {
     id: string;
     enabled: boolean;

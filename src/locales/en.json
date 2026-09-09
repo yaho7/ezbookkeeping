@@ -2946,5 +2946,11 @@
     "OpenAI Compatible": "OpenAI Compatible",
     "OpenAI Responses Compatible": "OpenAI Responses Compatible",
     "Anthropic Compatible": "Anthropic Compatible",
-    "Preset": "Preset"
+    "Preset": "Preset",
+    "Generate with AI": "Generate with AI",
+    "AI generation uses the global model in Application Settings. The result is tested here and is not saved automatically.": "AI generation uses the global model in Application Settings. The result is tested here and is not saved automatically.",
+    "Open AI Settings": "Open AI Settings",
+    "Parser API and AI Prompt": "Parser API and AI Prompt",
+    "Copy this prompt when using an external AI. It includes the parser API, output schema, and current email sample.": "Copy this prompt when using an external AI. It includes the parser API, output schema, and current email sample.",
+    "Copy Prompt": "Copy Prompt"
 }

@@ -10,6 +10,7 @@ import type {
     EmailBillParserRule,
     EmailBillMessageSample,
     EmailBillParserPreview,
+    EmailBillGeneratedParser,
     EmailBillRoutingRule,
     EmailBillClassificationRule,
     EmailBillCandidate,
@@ -482,6 +483,9 @@ export default {
     },
     testEmailBillParser: (req: Record<string, unknown>): ApiResponsePromise<EmailBillParserPreview> => {
         return axios.post<ApiResponse<EmailBillParserPreview>>('v1/email_bill/parsers/test.json', req);
+    },
+    generateEmailBillParser: (req: Record<string, unknown>): ApiResponsePromise<EmailBillGeneratedParser> => {
+        return axios.post<ApiResponse<EmailBillGeneratedParser>>('v1/email_bill/parsers/generate.json', req, { timeout: DEFAULT_LLM_API_TIMEOUT });
     },
     listEmailBillMessages: (): ApiResponsePromise<EmailBillMessageSample[]> => {
         return axios.get<ApiResponse<EmailBillMessageSample[]>>('v1/email_bill/messages/list.json');

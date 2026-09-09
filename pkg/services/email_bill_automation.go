@@ -25,6 +25,7 @@ type EmailBillAutomationService struct {
 	db            *datastore.DataStoreContainer
 	uuids         *uuid.UuidContainer
 	parser        *emailbill.ScriptParser
+	generator     EmailBillParserCodeGenerator
 	defaultsMutex sync.Mutex
 }
 
@@ -33,7 +34,10 @@ var EmailBillAutomation = NewEmailBillAutomationService(datastore.Container, uui
 
 // NewEmailBillAutomationService creates the rule and test-bench service.
 func NewEmailBillAutomationService(db *datastore.DataStoreContainer, uuids *uuid.UuidContainer) *EmailBillAutomationService {
-	return &EmailBillAutomationService{db: db, uuids: uuids, parser: emailbill.NewScriptParser(emailbill.ScriptLimits{})}
+	return &EmailBillAutomationService{
+		db: db, uuids: uuids, parser: emailbill.NewScriptParser(emailbill.ScriptLimits{}),
+		generator: NewConfiguredEmailBillParserCodeGenerator(),
+	}
 }
 
 // EmailBillParserTestRequest is a no-side-effect parser test.

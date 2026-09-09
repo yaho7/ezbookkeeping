@@ -377,6 +377,7 @@ func startWebServer(c *core.CliContext) error {
 			apiV1Route.POST("/email_bill/parsers/save.json", bindApi(api.EmailBillAutomation.ParserRuleSaveHandler, config))
 			apiV1Route.POST("/email_bill/parsers/disable.json", bindApi(api.EmailBillAutomation.ParserRuleDisableHandler, config))
 			apiV1Route.POST("/email_bill/parsers/test.json", bindApi(api.EmailBillAutomation.ParserTestHandler, config))
+			apiV1Route.POST("/email_bill/parsers/generate.json", bindApi(api.EmailBillAutomation.ParserGenerateHandler, config))
 			apiV1Route.GET("/email_bill/routes/list.json", bindApi(api.EmailBillAutomation.RoutingRuleListHandler, config))
 			apiV1Route.POST("/email_bill/routes/save.json", bindApi(api.EmailBillAutomation.RoutingRuleSaveHandler, config))
 			apiV1Route.POST("/email_bill/routes/disable.json", bindApi(api.EmailBillAutomation.RoutingRuleDisableHandler, config))

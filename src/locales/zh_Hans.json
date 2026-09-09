@@ -2946,5 +2946,11 @@
     "OpenAI Compatible": "OpenAI 兼容接口",
     "OpenAI Responses Compatible": "OpenAI Responses 兼容接口",
     "Anthropic Compatible": "Anthropic 兼容接口",
-    "Preset": "预置"
+    "Preset": "预置",
+    "Generate with AI": "使用 AI 生成",
+    "AI generation uses the global model in Application Settings. The result is tested here and is not saved automatically.": "AI 生成使用“应用设置”中的全局模型；生成结果会先在这里测试，不会自动保存。",
+    "Open AI Settings": "打开 AI 设置",
+    "Parser API and AI Prompt": "解析器接口与 AI 提示词",
+    "Copy this prompt when using an external AI. It includes the parser API, output schema, and current email sample.": "使用外部 AI 时可复制这段提示词，其中包含解析器接口、输出格式和当前邮件样本。",
+    "Copy Prompt": "复制提示词"
 }

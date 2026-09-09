@@ -38,3 +38,14 @@ func TestEmailBillParserTestRequestParsesRFC3339MailTime(t *testing.T) {
 	_, offset := request.Mail.ReceivedAt.Zone()
 	assert.Equal(t, 8*60*60, offset)
 }
+
+func TestEmailBillParserGenerateRequestParsesMail(t *testing.T) {
+	mail, err := emailBillTestMailServiceRequest(emailBillTestMailRequest{
+		MessageID: "m1", Sender: "bank@example.com", Subject: "bill", Text: "content",
+		ReceivedAt: "2026-09-08T10:00:00+08:00",
+	})
+
+	require.NoError(t, err)
+	assert.Equal(t, "m1", mail.RemoteMessageID)
+	assert.Equal(t, 10, mail.ReceivedAt.Hour())
+}
