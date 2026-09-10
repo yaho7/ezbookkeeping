@@ -9,6 +9,9 @@ import type {
     EmailBillSettings,
     EmailBillParserRule,
     EmailBillMessageSample,
+    EmailBillSyncTask,
+    EmailBillMailboxPage,
+    EmailBillMailboxDetail,
     EmailBillParserPreview,
     EmailBillGeneratedParser,
     EmailBillRoutingRule,
@@ -475,8 +478,17 @@ export default {
     testEmailBillSettings: (req: EmailBillSettings): ApiResponsePromise<boolean> => {
         return axios.post<ApiResponse<boolean>>('v1/users/settings/email_bill/test.json', req, { timeout: DEFAULT_LLM_API_TIMEOUT });
     },
-    runEmailBillImport: (): ApiResponsePromise<boolean> => {
-        return axios.post<ApiResponse<boolean>>('v1/users/settings/email_bill/run.json', undefined, { timeout: DEFAULT_IMPORT_API_TIMEOUT });
+    runEmailBillImport: (): ApiResponsePromise<EmailBillSyncTask> => {
+        return axios.post<ApiResponse<EmailBillSyncTask>>('v1/users/settings/email_bill/run.json');
+    },
+    getEmailBillSyncStatus: (): ApiResponsePromise<EmailBillSyncTask | null> => {
+        return axios.get<ApiResponse<EmailBillSyncTask | null>>('v1/users/settings/email_bill/status.json');
+    },
+    listEmailBillMailbox: (params: { folder: string; status: string; search: string; page: number }): ApiResponsePromise<EmailBillMailboxPage> => {
+        return axios.get<ApiResponse<EmailBillMailboxPage>>('v1/email_bill/mailbox/list.json', { params });
+    },
+    getEmailBillMailboxDetail: (id: string): ApiResponsePromise<EmailBillMailboxDetail> => {
+        return axios.get<ApiResponse<EmailBillMailboxDetail>>('v1/email_bill/mailbox/detail.json', { params: { id } });
     },
     listEmailBillParsers: (): ApiResponsePromise<EmailBillParserRule[]> => {
         return axios.get<ApiResponse<EmailBillParserRule[]>>('v1/email_bill/parsers/list.json');

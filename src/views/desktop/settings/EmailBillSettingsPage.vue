@@ -9,13 +9,14 @@
                     </v-chip>
                     <v-spacer />
                     <v-btn prepend-icon="$refresh" variant="text" :loading="loading" @click="loadPage">{{ tt('Refresh') }}</v-btn>
-                    <v-btn color="primary" prepend-icon="$play" :loading="running" @click="runNow">{{ tt('Run Now') }}</v-btn>
+                    <v-btn color="primary" prepend-icon="$play" :loading="running" :disabled="!settings.enabled && !taskActive" @click="runNow">{{ tt(taskActive ? 'View Progress' : 'Run Now') }}</v-btn>
                 </v-card-title>
                 <v-card-subtitle class="pb-3 text-wrap">
                     {{ tt('Import bank emails through independent parsers, routing rules and auditable classification decisions.') }}
                 </v-card-subtitle>
 
                 <v-tabs v-model="activeTab" color="primary" show-arrows>
+                    <v-tab value="workspace">{{ tt('Email Workspace') }}</v-tab>
                     <v-tab value="mailbox">{{ tt('Mailbox & Schedule') }}</v-tab>
                     <v-tab value="parsers">{{ tt('Parser Rules') }}</v-tab>
                     <v-tab value="routing">{{ tt('Account Routing') }}</v-tab>
@@ -27,6 +28,9 @@
 
         <v-col cols="12">
             <v-window v-model="activeTab">
+                <v-window-item value="workspace" eager>
+                    <email-bill-mailbox ref="mailboxWorkspace" @active="taskActive = $event" @review="showReview" @test="testWorkspaceMessage" />
+                </v-window-item>
                 <v-window-item value="mailbox">
                     <v-card :title="tt('Mailbox & Schedule')">
                         <v-card-text>
@@ -151,10 +155,12 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref, useTemplateRef } from 'vue';
+import { computed, nextTick, onMounted, reactive, ref, useTemplateRef } from 'vue';
 import { isAxiosError } from 'axios';
 
 import SnackBar from '@/components/desktop/SnackBar.vue';
+import EmailBillMailbox from '@/components/desktop/EmailBillMailbox.vue';
+import type { EmailBillMailboxDetail } from '@/core/emailBill.ts';
 import { useI18n } from '@/locales/helpers.ts';
 import services from '@/lib/services.ts';
 import { buildEmailBillSchedule, createEmailBillParserRule, parseEmailBillSchedule, type EmailBillAuditEvent, type EmailBillCandidate, type EmailBillCandidateVariant, type EmailBillClassificationRule, type EmailBillParserPreview, type EmailBillParserRule, type EmailBillRoutingRule, type EmailBillScheduleMode, type EmailBillSettings } from '@/core/emailBill.ts';
@@ -170,7 +176,9 @@ const { tt } = useI18n();
 const store = useEmailBillStore();
 const snackbar = useTemplateRef<SnackBarType>('snackbar');
 
-const activeTab = ref('mailbox');
+const activeTab = ref('workspace');
+const mailboxWorkspace = useTemplateRef<InstanceType<typeof EmailBillMailbox>>('mailboxWorkspace');
+const taskActive = ref(false);
 const loading = ref(false);
 const saving = ref(false);
 const running = ref(false);
@@ -237,7 +245,23 @@ async function saveSettings(): Promise<void> {
     } catch (error) { showError(error); } finally { saving.value = false; }
 }
 
-async function runNow(): Promise<void> { running.value = true; try { resultOf(await services.runEmailBillImport()); await store.reloadCandidates(); snackbar.value?.showMessage('Data has been updated'); } catch (error) { showError(error); } finally { running.value = false; } }
+async function runNow(): Promise<void> {
+    activeTab.value = 'workspace';
+    running.value = true;
+    try { await nextTick(); await mailboxWorkspace.value?.start(); }
+    finally { running.value = false; }
+}
+async function showReview(): Promise<void> {
+    activeTab.value = 'review';
+    try { await store.reloadCandidates(); } catch (error) { showError(error); }
+}
+function testWorkspaceMessage(detail: EmailBillMailboxDetail): void {
+    const rule = store.parsers.find(item => item.matcher.senders.some(sender => detail.message.sender.toLowerCase().includes(sender.toLowerCase())));
+    openParser(rule);
+    testMessageId.value = null;
+    Object.assign(testMail, { messageId: detail.message.remoteMessageId, sender: detail.message.sender, subject: detail.message.subject,
+        receivedAt: detail.receivedAt || new Date(detail.message.receivedUnixTime * 1000).toISOString(), text: detail.text, headers: {} });
+}
 async function testMailbox(): Promise<void> { testingMailbox.value = true; try { resultOf(await services.testEmailBillSettings({ ...settings, mailPassword: mailPassword.value || undefined })); snackbar.value?.showMessage('Connection test succeeded'); } catch (error) { showError(error); } finally { testingMailbox.value = false; } }
 
 function openParser(rule?: EmailBillParserRule): void { Object.assign(parserDraft, rule ? JSON.parse(JSON.stringify(rule)) : createEmailBillParserRule()); parserSenders.value = parserDraft.matcher.senders.join(', '); parserSubjects.value = parserDraft.matcher.subjectContains.join(', '); preview.value = null; parserDialog.value = true; }

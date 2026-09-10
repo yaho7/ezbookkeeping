@@ -43,6 +43,57 @@ export interface EmailBillMessageSample {
     authenticationStatus: string;
 }
 
+export interface EmailBillSyncTask {
+    id: string;
+    status: string;
+    stage: string;
+    currentFolder: string;
+    scanned: number;
+    downloaded: number;
+    processed: number;
+    skipped: number;
+    failed: number;
+    errorMessage: string;
+    startedUnixTime: number;
+    updatedUnixTime: number;
+    completedUnixTime: number;
+    folders: Array<{ name: string; status: string; total: number; scanned: number }>;
+}
+
+export interface EmailBillScanMessage {
+    id: string;
+    folder: string;
+    sender: string;
+    subject: string;
+    remoteMessageId: string;
+    receivedUnixTime: number;
+    updatedUnixTime: number;
+    authenticated: boolean;
+    status: string;
+    reason: string;
+    messageId: string;
+    importRunId: string;
+    taskId: string;
+}
+
+export interface EmailBillMailboxPage {
+    messages: EmailBillScanMessage[];
+    total: number;
+    page: number;
+    pageSize: number;
+    folders: string[];
+}
+
+export interface EmailBillMailboxDetail {
+    message: EmailBillScanMessage;
+    text: string;
+    bodySummary: string;
+    receivedAt?: string;
+    runStatus?: string;
+    parsers: Array<{ name: string; version: number; status: string; matched: boolean; outputs: number; errorMessage: string; durationMillis: number }>;
+    candidates: Array<{ id: string; status: string; amount: number; currency: string; merchant: string }>;
+}
+
 export interface EmailBillParserPreview {
     matched: boolean;
     executionSteps: number;
