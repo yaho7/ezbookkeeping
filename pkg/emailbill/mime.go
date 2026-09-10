@@ -10,7 +10,6 @@ import (
 	"mime/multipart"
 	"mime/quotedprintable"
 	"net/mail"
-	"regexp"
 	"strings"
 	"time"
 
@@ -18,39 +17,26 @@ import (
 	"golang.org/x/net/html/charset"
 )
 
-var (
-	dkimDomainPattern   = regexp.MustCompile(`header\.(?:d|i)\s*=\s*`)
-	spfSenderPattern    = regexp.MustCompile(`smtp\.(?:mailfrom|helo)\s*=\s*`)
-	authPropertyPattern = regexp.MustCompile(`\s+[a-z][a-z0-9_.-]*\s*=`)
-	authPassPattern     = regexp.MustCompile(`^\s*(dkim|spf)\s*=\s*pass(?:\s|\(|$)`)
-)
-
 // DefaultMaxMessageBytes is the maximum RFC 5322 message size decoded by default.
 const DefaultMaxMessageBytes uint32 = 2 * 1024 * 1024
 
-// MessageSecurity controls validation of received Authentication-Results headers.
-type MessageSecurity struct {
-	RequireAuthenticationResults bool
-	TrustedAuthservDomains       []string
-}
-
 // DecodeMessage decodes one RFC 5322 message into parser input.
-func DecodeMessage(reader io.Reader, security MessageSecurity, fallbackTime time.Time) (Message, error) {
-	return DecodeMessageWithLimit(reader, security, fallbackTime, DefaultMaxMessageBytes)
+func DecodeMessage(reader io.Reader, fallbackTime time.Time) (Message, error) {
+	return DecodeMessageWithLimit(reader, fallbackTime, DefaultMaxMessageBytes)
 }
 
 // DecodeMessageWithLimit decodes one RFC 5322 message without reading beyond maxBytes.
-func DecodeMessageWithLimit(reader io.Reader, security MessageSecurity, fallbackTime time.Time, maxBytes uint32) (Message, error) {
-	return decodeMessageWithLimit(reader, security, fallbackTime, maxBytes, false)
+func DecodeMessageWithLimit(reader io.Reader, fallbackTime time.Time, maxBytes uint32) (Message, error) {
+	return decodeMessageWithLimit(reader, fallbackTime, maxBytes, false)
 }
 
 // DecodeMessageHeadersWithLimit decodes IMAP header-only responses without trying
 // to parse a MIME body that has not been downloaded yet.
-func DecodeMessageHeadersWithLimit(reader io.Reader, security MessageSecurity, fallbackTime time.Time, maxBytes uint32) (Message, error) {
-	return decodeMessageWithLimit(reader, security, fallbackTime, maxBytes, true)
+func DecodeMessageHeadersWithLimit(reader io.Reader, fallbackTime time.Time, maxBytes uint32) (Message, error) {
+	return decodeMessageWithLimit(reader, fallbackTime, maxBytes, true)
 }
 
-func decodeMessageWithLimit(reader io.Reader, security MessageSecurity, fallbackTime time.Time, maxBytes uint32, headersOnly bool) (Message, error) {
+func decodeMessageWithLimit(reader io.Reader, fallbackTime time.Time, maxBytes uint32, headersOnly bool) (Message, error) {
 	limitedReader := &io.LimitedReader{R: reader, N: int64(maxBytes) + 1}
 	content, err := io.ReadAll(limitedReader)
 	if err != nil {
@@ -59,10 +45,10 @@ func decodeMessageWithLimit(reader io.Reader, security MessageSecurity, fallback
 	if uint64(len(content)) > uint64(maxBytes) {
 		return Message{}, fmt.Errorf("email message exceeds size limit of %d bytes", maxBytes)
 	}
-	return decodeMessage(bytes.NewReader(content), security, fallbackTime, headersOnly)
+	return decodeMessage(bytes.NewReader(content), fallbackTime, headersOnly)
 }
 
-func decodeMessage(reader io.Reader, security MessageSecurity, fallbackTime time.Time, headersOnly bool) (Message, error) {
+func decodeMessage(reader io.Reader, fallbackTime time.Time, headersOnly bool) (Message, error) {
 	mailMessage, err := mail.ReadMessage(reader)
 	if err != nil {
 		return Message{}, fmt.Errorf("read email message: %w", err)
@@ -105,19 +91,18 @@ func decodeMessage(reader io.Reader, security MessageSecurity, fallbackTime time
 	}
 
 	return Message{
-		Fingerprint:   fingerprint,
-		MessageID:     messageID,
-		Sender:        sender,
-		Subject:       subject,
-		Text:          strings.TrimSpace(text),
-		Headers:       safeParserHeaders(mailMessage.Header),
-		ReceivedAt:    receivedAt,
-		Authenticated: authenticationResultsValid(mailMessage.Header.Get("Authentication-Results"), security),
+		Fingerprint: fingerprint,
+		MessageID:   messageID,
+		Sender:      sender,
+		Subject:     subject,
+		Text:        strings.TrimSpace(text),
+		Headers:     safeParserHeaders(mailMessage.Header),
+		ReceivedAt:  receivedAt,
 	}, nil
 }
 
 func safeParserHeaders(header mail.Header) map[string]string {
-	allowed := []string{"From", "To", "Cc", "Reply-To", "Date", "Subject", "Message-ID", "Authentication-Results"}
+	allowed := []string{"From", "To", "Cc", "Reply-To", "Date", "Subject", "Message-ID"}
 	result := make(map[string]string, len(allowed))
 	for _, key := range allowed {
 		if value := strings.TrimSpace(header.Get(key)); value != "" {
@@ -220,71 +205,4 @@ func htmlToText(content string) string {
 		}
 	}
 	return text.String()
-}
-
-func authenticationResultsValid(header string, security MessageSecurity) bool {
-	if !security.RequireAuthenticationResults {
-		return true
-	}
-	parts := strings.Split(strings.ToLower(header), ";")
-	authservFields := strings.Fields(parts[0])
-	if len(parts) < 2 || len(authservFields) == 0 || !domainMatchesAny(authservFields[0], security.TrustedAuthservDomains) {
-		return false
-	}
-
-	for _, result := range parts[1:] {
-		method := authPassPattern.FindStringSubmatch(result)
-		if method == nil {
-			continue
-		}
-		if method[1] == "dkim" {
-			if identity := authenticationIdentity(result, dkimDomainPattern); identity != "" && domainMatches(strings.TrimPrefix(identity, "@"), "cmbchina.com") {
-				return true
-			}
-		}
-		if method[1] == "spf" {
-			if identity := authenticationIdentity(result, spfSenderPattern); identity != "" {
-				if at := strings.LastIndex(identity, "@"); at >= 0 {
-					identity = identity[at+1:]
-				}
-				if domainMatches(identity, "cmbchina.com") {
-					return true
-				}
-			}
-		}
-	}
-	return false
-}
-
-// QQ folds long Authentication-Results inside domain names and mailbox values.
-// Recover whitespace within one property only; never join separate properties,
-// result clauses or authserv identities, and still require an exact domain suffix.
-func authenticationIdentity(result string, property *regexp.Regexp) string {
-	position := property.FindStringIndex(result)
-	if position == nil {
-		return ""
-	}
-	value := result[position[1]:]
-	if next := authPropertyPattern.FindStringIndex(value); next != nil {
-		value = value[:next[0]]
-	}
-	if comment := strings.IndexByte(value, '('); comment >= 0 {
-		value = value[:comment]
-	}
-	return strings.Trim(strings.Join(strings.Fields(value), ""), "<>\"")
-}
-
-func domainMatchesAny(domain string, allowed []string) bool {
-	for _, candidate := range allowed {
-		if domainMatches(domain, candidate) {
-			return true
-		}
-	}
-	return false
-}
-
-func domainMatches(domain string, suffix string) bool {
-	domain = strings.TrimSuffix(strings.ToLower(strings.TrimSpace(domain)), ".")
-	suffix = strings.TrimSuffix(strings.ToLower(strings.TrimSpace(suffix)), ".")
-	return domain == suffix || strings.HasSuffix(domain, "."+suffix)
 }

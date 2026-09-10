@@ -12,17 +12,16 @@ const (
 
 // Message contains the normalized parts of one matching email.
 type Message struct {
-	Folder        string
-	UID           uint32
-	UIDValidity   uint32
-	Fingerprint   string
-	MessageID     string
-	Sender        string
-	Subject       string
-	ReceivedAt    time.Time
-	Text          string
-	Headers       map[string]string
-	Authenticated bool
+	Folder      string
+	UID         uint32
+	UIDValidity uint32
+	Fingerprint string
+	MessageID   string
+	Sender      string
+	Subject     string
+	ReceivedAt  time.Time
+	Text        string
+	Headers     map[string]string
 }
 
 // ParsedTransaction is a bank transaction before ezBookkeeping account mapping.

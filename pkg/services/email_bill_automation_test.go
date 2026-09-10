@@ -18,7 +18,7 @@ func TestEmailBillParserTestBenchReturnsPreviewWithoutPersistence(t *testing.T) 
 		SourceCode: oneBillScript("coffee"),
 		Mail: EmailBillFetchedMessage{
 			RemoteMessageID: "<preview@example.com>", Sender: "bank@example.com", Subject: "bill",
-			ReceivedAt: time.Date(2026, 9, 8, 10, 0, 0, 0, time.UTC), Text: "sample", Authenticated: true,
+			ReceivedAt: time.Date(2026, 9, 8, 10, 0, 0, 0, time.UTC), Text: "sample",
 		},
 	}
 
@@ -36,7 +36,7 @@ func TestEmailBillParserTestBenchDoesNotRunWhenMatcherMisses(t *testing.T) {
 	preview, err := service.TestParser(EmailBillParserTestRequest{
 		UID: 7, Matcher: emailbill.ParserMatcher{Senders: []string{"other@example.com"}},
 		SourceCode: "invalid source is intentionally never executed",
-		Mail:       authenticatedScriptMail(),
+		Mail:       sampleScriptMail(),
 	})
 
 	require.NoError(t, err)
@@ -48,7 +48,7 @@ func TestEmailBillParserTestBenchRejectsInvalidParserOutput(t *testing.T) {
 	service := NewEmailBillAutomationService(nil, nil)
 	_, err := service.TestParser(EmailBillParserTestRequest{
 		UID: 7, SourceCode: "def parse(mail):\n  return [{\"amount\": \"1.00\"}]",
-		Mail: authenticatedScriptMail(),
+		Mail: sampleScriptMail(),
 	})
 
 	assert.ErrorContains(t, err, "occurred_at")

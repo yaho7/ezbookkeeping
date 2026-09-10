@@ -12,35 +12,31 @@ import (
 )
 
 // EmailBillFetchedMessage is the complete normalized mail input accepted by the
-// automation pipeline. Authentication is checked before any user code runs.
+// automation pipeline. Sender and subject matching select the parser rules.
 type EmailBillFetchedMessage struct {
-	RemoteMessageID      string
-	Sender               string
-	Subject              string
-	ReceivedAt           time.Time
-	Text                 string
-	Headers              map[string]string
-	Authenticated        bool
-	RetainBody           bool
-	AuthenticationDetail string
+	RemoteMessageID string
+	Sender          string
+	Subject         string
+	ReceivedAt      time.Time
+	Text            string
+	Headers         map[string]string
+	RetainBody      bool
 }
 
 // EmailBillMessageInput is the immutable message evidence persisted at the
 // start of a run.
 type EmailBillMessageInput struct {
-	UID                  int64
-	MailboxID            int64
-	RemoteMessageID      string
-	Fingerprint          string
-	FingerprintVersion   uint16
-	Sender               string
-	Subject              string
-	ReceivedAt           time.Time
-	BodyHash             string
-	BodySummary          string
-	BodyContent          string
-	Authenticated        bool
-	AuthenticationDetail string
+	UID                int64
+	MailboxID          int64
+	RemoteMessageID    string
+	Fingerprint        string
+	FingerprintVersion uint16
+	Sender             string
+	Subject            string
+	ReceivedAt         time.Time
+	BodyHash           string
+	BodySummary        string
+	BodyContent        string
 }
 
 // EmailBillPersistedRun is the repository-neutral run state.
@@ -112,7 +108,6 @@ func (p *EmailBillPipeline) ProcessMessage(c core.Context, uid, mailboxID int64,
 		Fingerprint: fingerprint, FingerprintVersion: fingerprintVersion,
 		Sender: fetched.Sender, Subject: fetched.Subject, ReceivedAt: fetched.ReceivedAt,
 		BodyHash: "sha256:" + hex.EncodeToString(bodyDigest[:]), BodySummary: summarizeEmailBody(fetched.Text), BodyContent: retainedEmailBillBody(fetched),
-		Authenticated: fetched.Authenticated, AuthenticationDetail: fetched.AuthenticationDetail,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("persist email message: %w", err)
@@ -120,13 +115,6 @@ func (p *EmailBillPipeline) ProcessMessage(c core.Context, uid, mailboxID int64,
 	result := &EmailBillPipelineResult{MessageID: messageID, RunID: runID, Duplicate: duplicate}
 	if duplicate {
 		result.Status = "duplicate"
-		return result, nil
-	}
-	if !fetched.Authenticated {
-		result.Status = "rejected"
-		if err := p.repository.FinishRun(c, uid, runID, result.Status, "email authentication failed"); err != nil {
-			return nil, err
-		}
 		return result, nil
 	}
 

@@ -36,7 +36,6 @@ type MailboxConfig struct {
 	Password        string
 	MaxEmails       uint32
 	MaxMessageBytes uint32
-	Security        MessageSecurity
 }
 
 // IMAPMailbox fetches supported CMB emails over IMAPS without changing message flags.
@@ -162,12 +161,12 @@ func (m *IMAPMailbox) fetchFolder(ctx context.Context, imapClient *client.Client
 		if err != nil || len(messageDates) == 0 {
 			return nil, err
 		}
-		messageDates, err = m.fetchAuthenticatedHeaders(ctx, imapClient, sortedUIDs(messageDates), messageDates)
+		messageDates, err = m.fetchMatchingHeaders(ctx, imapClient, sortedUIDs(messageDates), messageDates)
 		if err != nil || len(messageDates) == 0 {
 			return nil, err
 		}
 		messageDates = newestMessageDates(messageDates, remaining)
-		messages, err := m.fetchAuthenticatedBodies(ctx, imapClient, sortedUIDs(messageDates), messageDates)
+		messages, err := m.fetchMessageBodies(ctx, imapClient, sortedUIDs(messageDates), messageDates)
 		// No IMAP response channel is active while parsing or calling the LLM.
 		if m.handler != nil {
 			for index, message := range messages {
@@ -346,12 +345,12 @@ func (m *IMAPMailbox) fetchMessageDatesWithinLimit(ctx context.Context, imapClie
 	}
 }
 
-func (m *IMAPMailbox) fetchAuthenticatedHeaders(ctx context.Context, imapClient *client.Client, uids []uint32, messageDates map[uint32]time.Time) (map[uint32]time.Time, error) {
+func (m *IMAPMailbox) fetchMatchingHeaders(ctx context.Context, imapClient *client.Client, uids []uint32, messageDates map[uint32]time.Time) (map[uint32]time.Time, error) {
 	sequenceSet := sequenceSetForUIDs(uids)
 	headerSection := &imap.BodySectionName{
 		BodyPartName: imap.BodyPartName{
 			Specifier: imap.HeaderSpecifier,
-			Fields:    []string{"From", "Subject", "Message-ID", "Date", "Authentication-Results"},
+			Fields:    []string{"From", "Subject", "Message-ID", "Date"},
 		},
 		Peek:    true,
 		Partial: []int{0, int(m.maxMessageBytes()) + 1},
@@ -365,7 +364,7 @@ func (m *IMAPMailbox) fetchAuthenticatedHeaders(ctx context.Context, imapClient 
 		}, fetched)
 	}()
 
-	authenticatedDates := make(map[uint32]time.Time, len(uids))
+	matchingDates := make(map[uint32]time.Time, len(uids))
 	for {
 		select {
 		case <-ctx.Done():
@@ -375,7 +374,7 @@ func (m *IMAPMailbox) fetchAuthenticatedHeaders(ctx context.Context, imapClient 
 				if err := <-fetchErr; err != nil {
 					return nil, fmt.Errorf("fetch IMAP message headers: %w", err)
 				}
-				return authenticatedDates, nil
+				return matchingDates, nil
 			}
 			if fetchedMessage == nil {
 				continue
@@ -388,13 +387,11 @@ func (m *IMAPMailbox) fetchAuthenticatedHeaders(ctx context.Context, imapClient 
 				}
 				continue
 			}
-			decoded, decodeErr := DecodeMessageHeadersWithLimit(header, m.config.Security, messageDates[fetchedMessage.Uid], m.maxMessageBytes())
+			decoded, decodeErr := DecodeMessageHeadersWithLimit(header, messageDates[fetchedMessage.Uid], m.maxMessageBytes())
 			decoded = m.located(decoded, fetchedMessage.Uid)
 			status, reason := "ready", ""
 			if decodeErr != nil {
 				status, reason = "failed", decodeErr.Error()
-			} else if !decoded.Authenticated {
-				status, reason = "rejected", "Email authentication failed"
 			} else if !m.supported(decoded) {
 				status, reason = "not_matched", "No enabled parser rule matches this sender and subject"
 			}
@@ -427,12 +424,12 @@ func (m *IMAPMailbox) fetchAuthenticatedHeaders(ctx context.Context, imapClient 
 			if err := m.report(ScanEvent{Kind: "message", Message: &decoded, Status: "ready", Scanned: true}); err != nil {
 				return nil, err
 			}
-			authenticatedDates[fetchedMessage.Uid] = messageDates[fetchedMessage.Uid]
+			matchingDates[fetchedMessage.Uid] = messageDates[fetchedMessage.Uid]
 		}
 	}
 }
 
-func (m *IMAPMailbox) fetchAuthenticatedBodies(ctx context.Context, imapClient *client.Client, uids []uint32, messageDates map[uint32]time.Time) ([]Message, error) {
+func (m *IMAPMailbox) fetchMessageBodies(ctx context.Context, imapClient *client.Client, uids []uint32, messageDates map[uint32]time.Time) ([]Message, error) {
 	sequenceSet := sequenceSetForUIDs(uids)
 	section := &imap.BodySectionName{
 		Peek:    true,
@@ -470,10 +467,10 @@ func (m *IMAPMailbox) fetchAuthenticatedBodies(ctx context.Context, imapClient *
 				}
 				continue
 			}
-			decoded, decodeErr := DecodeMessageWithLimit(body, m.config.Security, messageDates[fetchedMessage.Uid], m.maxMessageBytes())
+			decoded, decodeErr := DecodeMessageWithLimit(body, messageDates[fetchedMessage.Uid], m.maxMessageBytes())
 			decoded = m.located(decoded, fetchedMessage.Uid)
-			if decodeErr != nil || !decoded.Authenticated || !m.supported(decoded) {
-				reason := "Email authentication or parser matching failed after downloading"
+			if decodeErr != nil || !m.supported(decoded) {
+				reason := "Parser matching failed after downloading"
 				if decodeErr != nil {
 					reason = decodeErr.Error()
 				}

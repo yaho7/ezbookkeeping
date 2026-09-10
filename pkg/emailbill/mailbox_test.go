@@ -74,7 +74,7 @@ func TestFetchRecentMessageBatchesPreservesFailuresAndCancellation(t *testing.T)
 	require.ErrorIs(t, err, context.Canceled)
 }
 
-func TestDecodeMessageExtractsMultipartTextAndAuthenticatesBank(t *testing.T) {
+func TestDecodeMessageExtractsMultipartText(t *testing.T) {
 	raw := strings.Join([]string{
 		"From: =?UTF-8?B?5oub5ZWG6ZO26KGM?= <95555@message.cmbchina.com>",
 		"Subject: =?UTF-8?B?5oub5ZWG6ZO26KGM6YCa55+l?=",
@@ -92,37 +92,23 @@ func TestDecodeMessageExtractsMultipartTextAndAuthenticatesBank(t *testing.T) {
 		"",
 	}, "\r\n")
 
-	message, err := DecodeMessage(strings.NewReader(raw), MessageSecurity{
-		RequireAuthenticationResults: true,
-		TrustedAuthservDomains:       []string{"qq.com"},
-	}, time.Time{})
+	message, err := DecodeMessage(strings.NewReader(raw), time.Time{})
 
 	require.NoError(t, err)
 	assert.Equal(t, "95555@message.cmbchina.com", message.Sender)
 	assert.Equal(t, "招商银行通知", message.Subject)
 	assert.Contains(t, message.Text, "早餐店支付12.34元")
-	assert.True(t, message.Authenticated)
 	assert.Equal(t, "<bill-1@example.com>", message.Fingerprint)
 }
 
-func TestDecodeMessageRejectsUntrustedAuthenticationResults(t *testing.T) {
-	raw := strings.Join([]string{
-		"From: 95555@message.cmbchina.com",
-		"Subject: 招商银行通知",
-		"Authentication-Results: mx.qq.com.evil.example; dkim=pass header.d=message.cmbchina.com",
-		"Content-Type: text/plain; charset=utf-8",
-		"",
-		"test",
-		"",
-	}, "\r\n")
-
-	message, err := DecodeMessage(strings.NewReader(raw), MessageSecurity{
-		RequireAuthenticationResults: true,
-		TrustedAuthservDomains:       []string{"qq.com"},
-	}, time.Now())
-
-	require.NoError(t, err)
-	assert.False(t, message.Authenticated)
+func TestDecodeMessageIgnoresMissingAndFailedAuthentication(t *testing.T) {
+	for _, header := range []string{"", "Authentication-Results: mx.example; spf=fail; dkim=fail\r\n", "Authentication-Results: malformed\r\n"} {
+		raw := "From: bank@example.com\r\nSubject: Bill\r\n" + header + "\r\nCoffee 12.00 CNY"
+		message, err := DecodeMessage(strings.NewReader(raw), time.Now())
+		require.NoError(t, err)
+		assert.Equal(t, "Coffee 12.00 CNY", message.Text)
+		assert.NotContains(t, message.Headers, "authentication-results")
+	}
 }
 
 func TestDecodeMessagePreservesSafeHeadersForUserParsers(t *testing.T) {
@@ -138,7 +124,7 @@ func TestDecodeMessagePreservesSafeHeadersForUserParsers(t *testing.T) {
 		"Coffee 12.00 CNY",
 	}, "\r\n")
 
-	message, err := DecodeMessage(strings.NewReader(raw), MessageSecurity{}, time.Time{})
+	message, err := DecodeMessage(strings.NewReader(raw), time.Time{})
 	require.NoError(t, err)
 
 	assert.Equal(t, "<bill-42@example.com>", message.MessageID)
@@ -165,30 +151,10 @@ func TestIMAPMailboxWithoutBuiltInParsersAcceptsMailForUserRules(t *testing.T) {
 	assert.True(t, mailbox.supported(Message{Sender: "any-bank@example.com", Subject: "any subject"}))
 }
 
-func TestDecodeMessageAcceptsDKIMIdentityDomain(t *testing.T) {
-	raw := strings.Join([]string{
-		"From: 95555@message.cmbchina.com",
-		"Subject: 招商银行通知",
-		"Authentication-Results: mx.qq.com; dkim=pass header.i=@message.cmbchina.com",
-		"Content-Type: text/plain; charset=utf-8",
-		"",
-		"test",
-		"",
-	}, "\r\n")
-
-	message, err := DecodeMessage(strings.NewReader(raw), MessageSecurity{
-		RequireAuthenticationResults: true,
-		TrustedAuthservDomains:       []string{"qq.com"},
-	}, time.Now())
-
-	require.NoError(t, err)
-	assert.True(t, message.Authenticated)
-}
-
 func TestDecodeMessageRejectsOversizedBody(t *testing.T) {
 	raw := "From: 95555@message.cmbchina.com\r\nSubject: 招商银行通知\r\nContent-Type: text/plain\r\n\r\n" + strings.Repeat("x", 128)
 
-	_, err := DecodeMessageWithLimit(strings.NewReader(raw), MessageSecurity{}, time.Now(), 64)
+	_, err := DecodeMessageWithLimit(strings.NewReader(raw), time.Now(), 64)
 
 	require.ErrorContains(t, err, "size limit")
 }
@@ -203,31 +169,28 @@ func TestDecodeMessageHeadersAcceptsMultipartWithoutBody(t *testing.T) {
 		"Content-Type: multipart/alternative; boundary=mail-boundary",
 		"", "",
 	}, "\r\n")
-	security := MessageSecurity{RequireAuthenticationResults: true, TrustedAuthservDomains: []string{"qq.com"}}
 
-	message, err := DecodeMessageHeadersWithLimit(strings.NewReader(raw), security, time.Time{}, DefaultMaxMessageBytes)
+	message, err := DecodeMessageHeadersWithLimit(strings.NewReader(raw), time.Time{}, DefaultMaxMessageBytes)
 
 	require.NoError(t, err)
 	assert.Equal(t, "95555@message.cmbchina.com", message.Sender)
 	assert.Equal(t, "招商银行通知", message.Subject)
 	assert.Equal(t, "<multipart-bill@example.com>", message.MessageID)
 	assert.Equal(t, "2026-09-07T09:00:00+08:00", message.ReceivedAt.Format(time.RFC3339))
-	assert.True(t, message.Authenticated)
 	assert.Empty(t, message.Text)
 
 	// Full-message decoding must still reject a truncated multipart body.
-	_, err = DecodeMessage(strings.NewReader(raw), security, time.Time{})
+	_, err = DecodeMessage(strings.NewReader(raw), time.Time{})
 	require.ErrorContains(t, err, "read MIME part")
 }
 
-func TestDecodeMessageHeadersPreservesAuthenticationAndSizeChecks(t *testing.T) {
+func TestDecodeMessageHeadersWithoutAuthenticationPreservesSizeChecks(t *testing.T) {
 	raw := "From: 95555@message.cmbchina.com\r\nSubject: Bill\r\nContent-Type: multipart/alternative; boundary=bill\r\n\r\n"
-	security := MessageSecurity{RequireAuthenticationResults: true, TrustedAuthservDomains: []string{"qq.com"}}
 
-	message, err := DecodeMessageHeadersWithLimit(strings.NewReader(raw), security, time.Now(), DefaultMaxMessageBytes)
+	message, err := DecodeMessageHeadersWithLimit(strings.NewReader(raw), time.Now(), DefaultMaxMessageBytes)
 	require.NoError(t, err)
-	assert.False(t, message.Authenticated)
+	assert.Equal(t, "Bill", message.Subject)
 
-	_, err = DecodeMessageHeadersWithLimit(strings.NewReader(raw), security, time.Now(), 32)
+	_, err = DecodeMessageHeadersWithLimit(strings.NewReader(raw), time.Now(), 32)
 	require.ErrorContains(t, err, "size limit")
 }

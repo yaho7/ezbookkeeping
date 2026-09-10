@@ -22,19 +22,20 @@ type EmailBillMailboxCredential struct {
 
 // EmailBillInboundMessage is the stable identity of one fetched email.
 type EmailBillInboundMessage struct {
-	MessageId             int64  `xorm:"PK"`
-	Uid                   int64  `xorm:"INDEX NOT NULL"`
-	MailboxId             int64  `xorm:"UNIQUE(UNQ_email_bill_message_fingerprint) NOT NULL"`
-	RemoteMessageId       string `xorm:"VARCHAR(998)"`
-	MessageFingerprint    string `xorm:"UNIQUE(UNQ_email_bill_message_fingerprint) VARCHAR(80) NOT NULL"`
-	FingerprintVersion    uint16 `xorm:"UNIQUE(UNQ_email_bill_message_fingerprint) NOT NULL"`
-	Sender                string `xorm:"VARCHAR(254) NOT NULL"`
-	Subject               string `xorm:"TEXT NOT NULL"`
-	ReceivedUnixTime      int64  `xorm:"INDEX NOT NULL"`
-	BodyHash              string `xorm:"VARCHAR(80) NOT NULL"`
-	BodySummary           string `xorm:"TEXT"`
-	BodyContent           string `xorm:"TEXT"`
-	RawMessageRef         string `xorm:"VARCHAR(512)"`
+	MessageId          int64  `xorm:"PK"`
+	Uid                int64  `xorm:"INDEX NOT NULL"`
+	MailboxId          int64  `xorm:"UNIQUE(UNQ_email_bill_message_fingerprint) NOT NULL"`
+	RemoteMessageId    string `xorm:"VARCHAR(998)"`
+	MessageFingerprint string `xorm:"UNIQUE(UNQ_email_bill_message_fingerprint) VARCHAR(80) NOT NULL"`
+	FingerprintVersion uint16 `xorm:"UNIQUE(UNQ_email_bill_message_fingerprint) NOT NULL"`
+	Sender             string `xorm:"VARCHAR(254) NOT NULL"`
+	Subject            string `xorm:"TEXT NOT NULL"`
+	ReceivedUnixTime   int64  `xorm:"INDEX NOT NULL"`
+	BodyHash           string `xorm:"VARCHAR(80) NOT NULL"`
+	BodySummary        string `xorm:"TEXT"`
+	BodyContent        string `xorm:"TEXT"`
+	RawMessageRef      string `xorm:"VARCHAR(512)"`
+	// Legacy columns retained for existing database compatibility, not validation.
 	AuthenticationStatus  string `xorm:"VARCHAR(24) NOT NULL"`
 	AuthenticationSummary string `xorm:"TEXT"`
 	CreatedUnixTime       int64

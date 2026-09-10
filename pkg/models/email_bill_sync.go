@@ -33,7 +33,6 @@ type EmailBillScanMessage struct {
 	Sender           string `xorm:"VARCHAR(254)" json:"sender"`
 	Subject          string `xorm:"TEXT" json:"subject"`
 	ReceivedUnixTime int64  `xorm:"INDEX" json:"receivedUnixTime"`
-	Authenticated    bool   `json:"authenticated"`
 	Status           string `xorm:"VARCHAR(32) INDEX" json:"status"`
 	Reason           string `xorm:"TEXT" json:"reason"`
 	MessageId        int64  `xorm:"INDEX" json:"messageId,string"`

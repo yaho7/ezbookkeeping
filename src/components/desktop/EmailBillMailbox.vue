@@ -59,7 +59,7 @@
             <section class="mail-detail pa-5" :aria-label="tt('Email Details')" :aria-busy="detailLoading">
                 <div v-if="detailLoading && !detail" class="text-medium-emphasis">{{ tt('Loading...') }}</div>
                 <template v-else-if="detail">
-                    <div class="d-flex flex-wrap ga-2 mb-3"><v-chip size="small" variant="tonal" :color="statusColor(detail.message.status)">{{ messageStatus(detail.message.status) }}</v-chip><v-chip size="small" variant="outlined">{{ tt(detail.message.authenticated ? 'Authentication passed' : 'Authentication not verified') }}</v-chip></div>
+                    <div class="d-flex flex-wrap ga-2 mb-3"><v-chip size="small" variant="tonal" :color="statusColor(detail.message.status)">{{ messageStatus(detail.message.status) }}</v-chip></div>
                     <h2 class="text-h6 mb-3 mail-subject">{{ detail.message.subject || tt('No Subject') }}</h2>
                     <div class="text-body-2 text-medium-emphasis mb-1">{{ detail.message.sender || tt('Unknown Sender') }}</div>
                     <div class="text-caption text-medium-emphasis mb-4">{{ formatTime(detail.message.receivedUnixTime) }} · {{ detail.message.folder }}</div>
@@ -77,7 +77,7 @@
                     <v-divider class="my-5" />
                     <div class="d-flex align-center flex-wrap ga-2 mb-3"><h3 class="text-subtitle-1">{{ tt('Email Body') }}</h3><v-spacer /><v-btn size="small" variant="text" :disabled="!detail.text" @click="emit('test', detail)">{{ tt('Open in Test Bench') }}</v-btn></div>
                     <pre v-if="detail.text" class="mail-body">{{ detail.text }}</pre>
-                    <template v-else><p class="text-body-2 text-medium-emphasis">{{ tt('The full body was not retained or has expired. Only matching authenticated emails are downloaded; enable body retention in Mailbox & Schedule for future scans.') }}</p><p v-if="detail.bodySummary" class="mail-body mt-3">{{ detail.bodySummary }}</p></template>
+                    <template v-else><p class="text-body-2 text-medium-emphasis">{{ tt('The full body was not retained or has expired. Only matching emails are downloaded; enable body retention in Mailbox & Schedule for future scans.') }}</p><p v-if="detail.bodySummary" class="mail-body mt-3">{{ detail.bodySummary }}</p></template>
                     <div class="text-caption text-disabled mt-5 mail-subject">{{ detail.message.remoteMessageId }}</div>
                 </template>
                 <div v-else class="mail-empty text-medium-emphasis">{{ tt('Select an email to inspect its content and processing results.') }}</div>
@@ -123,9 +123,9 @@ const counters = computed(() => [
     { label: 'Scanned', value: task.value?.scanned || 0 }, { label: 'Downloaded', value: task.value?.downloaded || 0 },
     { label: 'Processed', value: task.value?.processed || 0 }, { label: 'Skipped', value: task.value?.skipped || 0 }, { label: 'Failed', value: task.value?.failed || 0 }
 ]);
-const labels: Record<string, string> = { ready: 'Waiting for download', downloaded: 'Downloaded', processing: 'Processing', succeeded: 'Parsed', no_output: 'No bills parsed', not_matched: 'Not Matched', rejected: 'Authentication rejected', duplicate: 'Already processed', oversized: 'Message too large', failed: 'Failed', partial_success: 'Partially completed', not_processed: 'Not processed', imported: 'Imported', awaiting_account: 'Awaiting account', awaiting_classification: 'Awaiting classification', awaiting_confirmation: 'Awaiting confirmation', import_failed: 'Import failed', conflict: 'Conflict' };
+const labels: Record<string, string> = { ready: 'Waiting for download', downloaded: 'Downloaded', processing: 'Processing', succeeded: 'Parsed', no_output: 'No bills parsed', not_matched: 'Not Matched', rejected: 'Skipped', duplicate: 'Already processed', oversized: 'Message too large', failed: 'Failed', partial_success: 'Partially completed', not_processed: 'Not processed', imported: 'Imported', awaiting_account: 'Awaiting account', awaiting_classification: 'Awaiting classification', awaiting_confirmation: 'Awaiting confirmation', import_failed: 'Import failed', conflict: 'Conflict' };
 const stageLabels: Record<string, string> = { queued: 'Queued', connecting: 'Connecting to mailbox', scanning: 'Scanning folders', processing: 'Parsing & Bookkeeping' };
-const statusOptions = computed(() => [{ title: tt('All Statuses'), value: '' }, ...['succeeded', 'no_output', 'not_matched', 'rejected', 'duplicate', 'oversized', 'failed', 'partial_success', 'not_processed', 'ready', 'downloaded', 'processing'].map(value => ({ title: messageStatus(value), value }))]);
+const statusOptions = computed(() => [{ title: tt('All Statuses'), value: '' }, ...['succeeded', 'no_output', 'not_matched', 'duplicate', 'oversized', 'failed', 'partial_success', 'not_processed', 'ready', 'downloaded', 'processing'].map(value => ({ title: messageStatus(value), value }))]);
 
 watch(active, value => emit('active', value), { immediate: true });
 onMounted(() => { void refresh(); });

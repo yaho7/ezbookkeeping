@@ -45,7 +45,7 @@ func (r *memoryEmailBillPipelineRepository) SaveMessageAndStartRun(_ core.Contex
 func TestEmailBillPipelineOnlyPersistsRawBodyWhenExplicitlyRequested(t *testing.T) {
 	repository := newMemoryEmailBillPipelineRepository()
 	pipeline := NewEmailBillPipeline(repository, emailbill.NewScriptParser(emailbill.ScriptLimits{}))
-	mail := authenticatedScriptMail()
+	mail := sampleScriptMail()
 
 	_, err := pipeline.ProcessMessage(core.NewNullContext(), 7, 3, mail, nil)
 	require.NoError(t, err)
@@ -93,7 +93,7 @@ func (r *memoryEmailBillPipelineRepository) FinishRun(_ core.Context, _ int64, r
 func TestEmailBillPipelineDoesNotRepeatAnAlreadyPersistedMessage(t *testing.T) {
 	repository := newMemoryEmailBillPipelineRepository()
 	pipeline := NewEmailBillPipeline(repository, emailbill.NewScriptParser(emailbill.ScriptLimits{}))
-	mail := authenticatedScriptMail()
+	mail := sampleScriptMail()
 	rules := []emailbill.RunnableParserRule{{VersionID: 11, Matcher: emailbill.ParserMatcher{}, Source: oneBillScript("coffee")}}
 
 	first, err := pipeline.ProcessMessage(core.NewNullContext(), 7, 3, mail, rules)
@@ -117,7 +117,7 @@ func TestEmailBillPipelineRunsMatchingRulesIndependently(t *testing.T) {
 		{VersionID: 13, Matcher: emailbill.ParserMatcher{SubjectContains: []string{"unrelated"}}, Source: oneBillScript("ignored")},
 	}
 
-	result, err := pipeline.ProcessMessage(core.NewNullContext(), 7, 3, authenticatedScriptMail(), rules)
+	result, err := pipeline.ProcessMessage(core.NewNullContext(), 7, 3, sampleScriptMail(), rules)
 	require.NoError(t, err)
 
 	assert.Equal(t, "partial_success", result.Status)
@@ -128,26 +128,22 @@ func TestEmailBillPipelineRunsMatchingRulesIndependently(t *testing.T) {
 	assert.Len(t, repository.candidates, 1)
 }
 
-func TestEmailBillPipelineRejectsUnauthenticatedMailBeforeScripts(t *testing.T) {
-	repository := newMemoryEmailBillPipelineRepository()
-	pipeline := NewEmailBillPipeline(repository, emailbill.NewScriptParser(emailbill.ScriptLimits{}))
-	mail := authenticatedScriptMail()
-	mail.Authenticated = false
-
-	result, err := pipeline.ProcessMessage(core.NewNullContext(), 7, 3, mail, []emailbill.RunnableParserRule{{
-		VersionID: 11,
-		Matcher:   emailbill.ParserMatcher{},
-		Source:    "def parse(mail):\n  fail(\"must not execute\")",
-	}})
-	require.NoError(t, err)
-
-	assert.Equal(t, "rejected", result.Status)
-	assert.Empty(t, repository.parserRuns)
-	assert.Empty(t, repository.candidates)
+func TestEmailBillPipelineRunsMatchingRulesWithoutAuthentication(t *testing.T) {
+	for _, headers := range []map[string]string{nil, {"authentication-results": "spf=fail; dkim=fail"}} {
+		repository := newMemoryEmailBillPipelineRepository()
+		pipeline := NewEmailBillPipeline(repository, emailbill.NewScriptParser(emailbill.ScriptLimits{}))
+		mail := sampleScriptMail()
+		mail.Headers = headers
+		result, err := pipeline.ProcessMessage(core.NewNullContext(), 7, 3, mail, []emailbill.RunnableParserRule{{VersionID: 11, Matcher: emailbill.ParserMatcher{}, Source: oneBillScript("coffee")}})
+		require.NoError(t, err)
+		assert.Equal(t, "succeeded", result.Status)
+		require.Len(t, repository.parserRuns, 1)
+		require.Len(t, repository.candidates, 1)
+	}
 }
 
 func TestRetainedEmailBillBodyRequiresExplicitOptIn(t *testing.T) {
-	message := authenticatedScriptMail()
+	message := sampleScriptMail()
 	assert.Empty(t, retainedEmailBillBody(message))
 
 	message.RetainBody = true
@@ -174,15 +170,14 @@ func TestEmailBillOutputEvidenceMatchesExactVariantOnly(t *testing.T) {
 	assert.Equal(t, []int64{22}, matched)
 }
 
-func authenticatedScriptMail() EmailBillFetchedMessage {
+func sampleScriptMail() EmailBillFetchedMessage {
 	return EmailBillFetchedMessage{
 		RemoteMessageID: "<bill-1@example.com>",
 		Sender:          "bank@example.com",
 		Subject:         "card bill",
 		ReceivedAt:      time.Date(2026, 9, 8, 10, 0, 0, 0, time.UTC),
 		Text:            "merchant: coffee",
-		Authenticated:   true,
-		Headers:         map[string]string{"authentication-results": "dkim=pass"},
+		Headers:         map[string]string{"subject": "Daily bill"},
 	}
 }
 

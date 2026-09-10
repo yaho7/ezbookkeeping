@@ -26,7 +26,7 @@ func TestGenerateParserDraftValidatesGeneratedCodeAgainstSample(t *testing.T) {
 		SourceCode: oneBillScript("coffee"),
 	}}
 
-	draft, err := service.GenerateParserDraft(core.NewNullContext(), 7, authenticatedScriptMail())
+	draft, err := service.GenerateParserDraft(core.NewNullContext(), 7, sampleScriptMail())
 
 	require.NoError(t, err)
 	assert.Equal(t, "Demo bank", draft.Name)
@@ -40,7 +40,7 @@ func TestGenerateParserDraftRejectsMatcherThatMissesSample(t *testing.T) {
 		SourceCode: oneBillScript("coffee"),
 	}}
 
-	_, err := service.GenerateParserDraft(core.NewNullContext(), 7, authenticatedScriptMail())
+	_, err := service.GenerateParserDraft(core.NewNullContext(), 7, sampleScriptMail())
 
 	require.ErrorContains(t, err, "does not match")
 }
@@ -55,7 +55,7 @@ func TestParseEmailBillGeneratedParserRejectsUnknownFields(t *testing.T) {
 }
 
 func TestParserGenerationPromptMarksEmailAsUntrusted(t *testing.T) {
-	prompt, err := emailBillParserGenerationUserPrompt(authenticatedScriptMail())
+	prompt, err := emailBillParserGenerationUserPrompt(sampleScriptMail())
 
 	require.NoError(t, err)
 	assert.Contains(t, string(prompt), "UNTRUSTED_EMAIL_JSON")

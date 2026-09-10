@@ -64,8 +64,8 @@ func (r *EmailBillAutomationRepository) SaveMessageAndStartRun(c core.Context, i
 		RemoteMessageId: input.RemoteMessageID, MessageFingerprint: input.Fingerprint,
 		FingerprintVersion: input.FingerprintVersion, Sender: input.Sender, Subject: input.Subject,
 		ReceivedUnixTime: input.ReceivedAt.Unix(), BodyHash: input.BodyHash, BodySummary: input.BodySummary, BodyContent: input.BodyContent,
-		AuthenticationStatus: authenticationStatus(input.Authenticated), AuthenticationSummary: input.AuthenticationDetail,
-		CreatedUnixTime: now,
+		AuthenticationStatus: "not_checked", // Compatibility with the existing NOT NULL column.
+		CreatedUnixTime:      now,
 	}
 	run := &models.EmailBillImportRun{
 		ImportRunId: r.GenerateUuid(uuid.UUID_TYPE_EMAIL_BILL), MessageId: message.MessageId,
@@ -86,7 +86,7 @@ func (r *EmailBillAutomationRepository) SaveMessageAndStartRun(c core.Context, i
 			return insertErr
 		}
 		return r.insertAuditEvent(sess, input.UID, message.MessageId, 0, run.ImportRunId, "message_received", "system", map[string]any{
-			"authenticated": input.Authenticated, "fingerprintVersion": input.FingerprintVersion,
+			"fingerprintVersion": input.FingerprintVersion,
 		})
 	})
 	if err != nil {
@@ -334,13 +334,6 @@ func matchingEmailBillOutputIDs(identityKey, expectedFingerprint string, outputs
 		}
 	}
 	return ids
-}
-
-func authenticationStatus(authenticated bool) string {
-	if authenticated {
-		return "passed"
-	}
-	return "failed"
 }
 
 func parserErrorType(message string) string {

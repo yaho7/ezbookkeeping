@@ -42,7 +42,6 @@ export interface EmailBillMessageSample {
     receivedAt: string;
     text: string;
     bodySummary: string;
-    authenticationStatus: string;
 }
 
 export interface EmailBillSyncTask {
@@ -70,7 +69,6 @@ export interface EmailBillScanMessage {
     remoteMessageId: string;
     receivedUnixTime: number;
     updatedUnixTime: number;
-    authenticated: boolean;
     status: string;
     reason: string;
     messageId: string;

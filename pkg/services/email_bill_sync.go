@@ -231,7 +231,7 @@ func (s *EmailBillSyncService) run(task *models.EmailBillSyncTask, config *setti
 				task.Processed++
 			}
 			switch event.Status {
-			case "duplicate", "not_matched", "rejected", "oversized":
+			case "duplicate", "not_matched", "oversized":
 				task.Skipped++
 			case "failed", "partial_success":
 				task.Failed++
@@ -302,7 +302,7 @@ func (s *EmailBillSyncService) record(c core.Context, task *models.EmailBillSync
 	if !message.ReceivedAt.IsZero() {
 		entry.ReceivedUnixTime = message.ReceivedAt.Unix()
 	}
-	entry.Authenticated, entry.Status, entry.Reason = message.Authenticated, event.Status, sanitizeEmailTaskError(event.Reason, config)
+	entry.Status, entry.Reason = event.Status, sanitizeEmailTaskError(event.Reason, config)
 	entry.TaskId, entry.UpdatedUnixTime = task.TaskId, time.Now().Unix()
 	if event.MessageID > 0 {
 		entry.MessageId, entry.ImportRunId = event.MessageID, event.RunID

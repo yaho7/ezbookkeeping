@@ -328,7 +328,7 @@ func (a *EmailBillAutomationApi) MessageListHandler(c *core.WebContext) (any, *e
 		responses = append(responses, map[string]any{
 			"id": strconv.FormatInt(message.MessageId, 10), "messageId": message.RemoteMessageId,
 			"sender": message.Sender, "subject": message.Subject, "receivedAt": time.Unix(message.ReceivedUnixTime, 0).Format(time.RFC3339),
-			"text": message.BodyContent, "bodySummary": message.BodySummary, "authenticationStatus": message.AuthenticationStatus,
+			"text": message.BodyContent, "bodySummary": message.BodySummary,
 		})
 	}
 	return responses, nil
@@ -466,6 +466,6 @@ func emailBillTestMailServiceRequest(request emailBillTestMailRequest) (services
 	}
 	return services.EmailBillFetchedMessage{
 		RemoteMessageID: request.MessageID, Sender: request.Sender, Subject: request.Subject,
-		ReceivedAt: receivedAt, Text: request.Text, Headers: request.Headers, Authenticated: true,
+		ReceivedAt: receivedAt, Text: request.Text, Headers: request.Headers,
 	}, nil
 }

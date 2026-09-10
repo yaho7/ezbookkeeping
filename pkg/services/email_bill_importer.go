@@ -119,10 +119,6 @@ func (s *EmailBillImportService) Import(c core.Context) error {
 	}
 
 	for _, message := range messages {
-		if !message.Authenticated {
-			log.Warnf(c, "[email_bill_importer.Import] skipped unauthenticated email %q", message.Fingerprint)
-			continue
-		}
 		for _, parser := range parsers {
 			if !parser.Matches(message.Sender, message.Subject) {
 				continue
@@ -209,8 +205,7 @@ func (s *EmailBillImportService) importWithObserver(c core.Context, uid int64, c
 		result, processErr := s.pipeline.ProcessMessage(c, uid, uid, EmailBillFetchedMessage{
 			RemoteMessageID: message.MessageID, Sender: message.Sender, Subject: message.Subject,
 			ReceivedAt: message.ReceivedAt, Text: message.Text, Headers: message.Headers,
-			Authenticated: message.Authenticated,
-			RetainBody:    config.RetainRawEmails,
+			RetainBody: config.RetainRawEmails,
 		}, rules)
 		if processErr == nil && s.finalizer != nil && !result.Duplicate {
 			processErr = s.finalizer.FinalizeMessage(c, uid, uid, result.MessageID, result.RunID)
@@ -299,35 +294,7 @@ func newEmailBillMailbox(config *settings.EmailBillConfig, parsers []emailbill.P
 		Password:        config.MailPassword,
 		MaxEmails:       config.MaxEmails,
 		MaxMessageBytes: config.MaxMessageBytes,
-		Security:        automaticEmailBillMessageSecurity(config.MailUser, config.IMAPServer),
 	}, parsers)
-}
-
-func automaticEmailBillMessageSecurity(mailUser, imapServer string) emailbill.MessageSecurity {
-	mailDomain := ""
-	if at := strings.LastIndex(strings.TrimSpace(mailUser), "@"); at >= 0 {
-		mailDomain = strings.ToLower(strings.TrimSpace(mailUser[at+1:]))
-	}
-	knownDomains := map[string][]string{
-		"qq.com": {"qq.com"}, "foxmail.com": {"qq.com"},
-		"163.com": {"163.com"}, "126.com": {"163.com"}, "yeah.net": {"163.com"},
-		"gmail.com":   {"google.com"},
-		"outlook.com": {"outlook.com"}, "hotmail.com": {"outlook.com"}, "live.com": {"outlook.com"},
-	}
-	domains := knownDomains[mailDomain]
-	if len(domains) == 0 {
-		server := strings.ToLower(strings.TrimSpace(imapServer))
-		for domain, trusted := range knownDomains {
-			if server == "imap."+domain || strings.HasSuffix(server, "."+domain) {
-				domains = trusted
-				break
-			}
-		}
-	}
-	if len(domains) == 0 {
-		return emailbill.MessageSecurity{}
-	}
-	return emailbill.MessageSecurity{RequireAuthenticationResults: true, TrustedAuthservDomains: append([]string(nil), domains...)}
 }
 
 // TestConnection validates mailbox access without fetching or importing messages.

@@ -76,12 +76,11 @@ func TestEmailBillImporterTreatsConcurrentDuplicateAsImported(t *testing.T) {
 		markBeforeError: true,
 	}
 	mailbox := &fakeEmailBillMailbox{messages: []emailbill.Message{{
-		Fingerprint:   "<bill-race@example.com>",
-		Sender:        "ccsvc@message.cmbchina.com",
-		Subject:       "每日信用管家",
-		Text:          "2026/09/07 08:30:00 CNY 12.34 尾号1234消费 早餐店(每日邮件)",
-		ReceivedAt:    time.Date(2026, 9, 7, 9, 0, 0, 0, time.FixedZone("CST", 8*60*60)),
-		Authenticated: true,
+		Fingerprint: "<bill-race@example.com>",
+		Sender:      "ccsvc@message.cmbchina.com",
+		Subject:     "每日信用管家",
+		Text:        "2026/09/07 08:30:00 CNY 12.34 尾号1234消费 早餐店(每日邮件)",
+		ReceivedAt:  time.Date(2026, 9, 7, 9, 0, 0, 0, time.FixedZone("CST", 8*60*60)),
 	}}}
 	service := NewEmailBillImportService(
 		&fakeEmailBillConfigProvider{config: config},
@@ -137,7 +136,7 @@ func (m *streamingEmailBillMailbox) FetchRecent(context.Context) ([]emailbill.Me
 func TestEmailBillStreamingPersistsBeforeLaterScanFailure(t *testing.T) {
 	scanErr := errors.New("second folder disconnected")
 	for _, afterBatch := range []error{nil, scanErr} {
-		mailbox := &streamingEmailBillMailbox{fakeEmailBillMailbox: fakeEmailBillMailbox{messages: []emailbill.Message{{MessageID: "first", Authenticated: true}}}, afterBatch: afterBatch}
+		mailbox := &streamingEmailBillMailbox{fakeEmailBillMailbox: fakeEmailBillMailbox{messages: []emailbill.Message{{MessageID: "first"}}}, afterBatch: afterBatch}
 		pipeline := &fakeEmailBillPipelineProcessor{}
 		service := &EmailBillImportService{
 			automation: &fakeEmailBillAutomationRules{}, pipeline: pipeline,
@@ -188,7 +187,7 @@ func TestEmailBillImporterUsesConfigurableParserPipeline(t *testing.T) {
 	}}
 	mailbox := &fakeEmailBillMailbox{messages: []emailbill.Message{{
 		MessageID: "<one@example.com>", Sender: "bank@example.com", Subject: "bill", Text: "body",
-		ReceivedAt: time.Date(2026, 9, 8, 8, 0, 0, 0, time.UTC), Authenticated: true,
+		ReceivedAt: time.Date(2026, 9, 8, 8, 0, 0, 0, time.UTC),
 	}}}
 	pipeline := &fakeEmailBillPipelineProcessor{}
 	finalizer := &fakeEmailBillCandidateFinalizer{}
@@ -228,16 +227,6 @@ func TestEmailBillImporterTestsConnectionWithoutImporting(t *testing.T) {
 	require.NoError(t, err)
 }
 
-func TestAutomaticEmailBillSecurityRequiresKnownProvidersOnly(t *testing.T) {
-	known := automaticEmailBillMessageSecurity("alice@qq.com", "imap.qq.com")
-	unknown := automaticEmailBillMessageSecurity("alice@small.example", "mail.small.example")
-
-	assert.True(t, known.RequireAuthenticationResults)
-	assert.Equal(t, []string{"qq.com"}, known.TrustedAuthservDomains)
-	assert.False(t, unknown.RequireAuthenticationResults)
-	assert.Empty(t, unknown.TrustedAuthservDomains)
-}
-
 func TestEmailBillImporterCreatesNativeTransactionOnlyOnce(t *testing.T) {
 	config := &settings.Config{EmailBillConfig: &settings.EmailBillConfig{
 		Enabled:            true,
@@ -250,12 +239,11 @@ func TestEmailBillImporterCreatesNativeTransactionOnlyOnce(t *testing.T) {
 	}}
 	transactions := &fakeEmailBillTransactionService{markers: make(map[string]bool), occupiedTimes: make(map[int64]bool)}
 	mailbox := &fakeEmailBillMailbox{messages: []emailbill.Message{{
-		Fingerprint:   "<bill-1@example.com>",
-		Sender:        "ccsvc@message.cmbchina.com",
-		Subject:       "每日信用管家",
-		Text:          "2026/09/07 08:30:00 CNY 12.34 尾号1234消费 早餐店(每日邮件)",
-		ReceivedAt:    time.Date(2026, 9, 7, 9, 0, 0, 0, time.FixedZone("CST", 8*60*60)),
-		Authenticated: true,
+		Fingerprint: "<bill-1@example.com>",
+		Sender:      "ccsvc@message.cmbchina.com",
+		Subject:     "每日信用管家",
+		Text:        "2026/09/07 08:30:00 CNY 12.34 尾号1234消费 早餐店(每日邮件)",
+		ReceivedAt:  time.Date(2026, 9, 7, 9, 0, 0, 0, time.FixedZone("CST", 8*60*60)),
 	}}}
 	service := NewEmailBillImportService(
 		&fakeEmailBillConfigProvider{config: config},
