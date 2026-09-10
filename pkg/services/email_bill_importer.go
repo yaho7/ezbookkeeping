@@ -154,6 +154,10 @@ func (s *EmailBillImportService) Import(c core.Context) error {
 }
 
 func (s *EmailBillImportService) importWithAutomation(c core.Context, uid int64, config *settings.EmailBillConfig) error {
+	return s.importWithObserver(c, uid, config, nil)
+}
+
+func (s *EmailBillImportService) importWithObserver(c core.Context, uid int64, config *settings.EmailBillConfig, observer emailbill.ScanObserver) error {
 	if s.rawBodies != nil {
 		cutoff := int64(0)
 		if config.RetainRawEmails {
@@ -168,6 +172,18 @@ func (s *EmailBillImportService) importWithAutomation(c core.Context, uid int64,
 		return fmt.Errorf("load email bill parser rules: %w", err)
 	}
 	mailbox := s.mailboxFactory(config, nil)
+	if observable, ok := mailbox.(interface{ SetScanObserver(emailbill.ScanObserver) }); ok {
+		observable.SetScanObserver(observer)
+	}
+	if matchable, ok := mailbox.(interface {
+		SetParserMatchers([]emailbill.ParserMatcher)
+	}); ok {
+		matchers := make([]emailbill.ParserMatcher, 0, len(rules))
+		for _, rule := range rules {
+			matchers = append(matchers, rule.Matcher)
+		}
+		matchable.SetParserMatchers(matchers)
+	}
 	if filterable, ok := mailbox.(interface{ SetMessageFilter(emailbill.MessageFilter) }); ok && s.messageStore != nil {
 		filterable.SetMessageFilter(func(_ context.Context, message emailbill.Message) (bool, error) {
 			if strings.TrimSpace(message.MessageID) == "" {
@@ -181,24 +197,54 @@ func (s *EmailBillImportService) importWithAutomation(c core.Context, uid int64,
 			return !exists, lookupErr
 		})
 	}
-	messages, err := mailbox.FetchRecent(c)
-	if err != nil {
-		return err
-	}
-	for _, message := range messages {
+	process := func(message emailbill.Message) error {
+		if err := c.Err(); err != nil {
+			return err
+		}
+		if observer != nil {
+			if err := observer(emailbill.ScanEvent{Kind: "message", Message: &message, Folder: message.Folder, Status: "processing"}); err != nil {
+				return err
+			}
+		}
 		result, processErr := s.pipeline.ProcessMessage(c, uid, uid, EmailBillFetchedMessage{
 			RemoteMessageID: message.MessageID, Sender: message.Sender, Subject: message.Subject,
 			ReceivedAt: message.ReceivedAt, Text: message.Text, Headers: message.Headers,
 			Authenticated: message.Authenticated,
 			RetainBody:    config.RetainRawEmails,
 		}, rules)
-		if processErr != nil {
-			return fmt.Errorf("process email bill %q: %w", message.Fingerprint, processErr)
+		if processErr == nil && s.finalizer != nil && !result.Duplicate {
+			processErr = s.finalizer.FinalizeMessage(c, uid, uid, result.MessageID, result.RunID)
 		}
-		if s.finalizer != nil && !result.Duplicate {
-			if err = s.finalizer.FinalizeMessage(c, uid, uid, result.MessageID, result.RunID); err != nil {
-				return fmt.Errorf("finalize email bill %q: %w", message.Fingerprint, err)
+		if observer != nil {
+			event := emailbill.ScanEvent{Kind: "message", Message: &message, Folder: message.Folder, Processed: true}
+			if result != nil {
+				event.MessageID, event.RunID, event.Status = result.MessageID, result.RunID, result.Status
 			}
+			if processErr != nil {
+				event.Status, event.Reason = "failed", processErr.Error()
+			}
+			if err := observer(event); err != nil {
+				return err
+			}
+			// Failure evidence is retained; continue with independent messages.
+			return nil
+		}
+		return processErr
+	}
+	if streaming, ok := mailbox.(interface {
+		SetMessageHandler(func(emailbill.Message) error)
+	}); ok {
+		streaming.SetMessageHandler(process)
+		_, err = mailbox.FetchRecent(c)
+		return err
+	}
+	messages, err := mailbox.FetchRecent(c)
+	if err != nil {
+		return err
+	}
+	for _, message := range messages {
+		if err := process(message); err != nil {
+			return err
 		}
 	}
 	return nil

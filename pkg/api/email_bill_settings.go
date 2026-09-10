@@ -95,10 +95,20 @@ func (a *EmailBillSettingsApi) RunHandler(c *core.WebContext) (any, *errs.Error)
 	if config == nil || config.EmailBillConfig == nil || config.EmailBillConfig.TargetUser != user.Username {
 		return false, errs.ErrNotPermittedToPerformThisAction
 	}
-	if err = cron.Container.SyncRunJobNow("ImportEmailBills"); err != nil {
+	task, err := services.EmailBillSync.Start(c, user.Uid, config.EmailBillConfig, "manual")
+	if err != nil {
 		return false, errs.Or(err, errs.ErrOperationFailed)
 	}
-	return true, nil
+	return task, nil
+}
+
+// StatusHandler returns a persisted task snapshot without waiting for mailbox I/O.
+func (a *EmailBillSettingsApi) StatusHandler(c *core.WebContext) (any, *errs.Error) {
+	task, err := services.EmailBillSync.Latest(c, c.GetCurrentUid())
+	if err != nil {
+		return nil, errs.Or(err, errs.ErrOperationFailed)
+	}
+	return task, nil
 }
 
 // TestHandler verifies submitted IMAP settings without importing messages.

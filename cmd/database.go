@@ -185,6 +185,8 @@ func updateAllDatabaseTablesStructure(c *core.CliContext) error {
 		new(models.EmailBillMailbox),
 		new(models.EmailBillMailboxCredential),
 		new(models.EmailBillInboundMessage),
+		new(models.EmailBillSyncTask),
+		new(models.EmailBillScanMessage),
 		new(models.EmailBillParserRule),
 		new(models.EmailBillParserRuleVersion),
 		new(models.EmailBillImportRun),

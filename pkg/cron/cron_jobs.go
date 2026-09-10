@@ -42,7 +42,8 @@ func NewEmailBillImportJob(cronExpression string, timezone string) *CronJob {
 			Expression: fmt.Sprintf("CRON_TZ=%s %s", timezone, cronExpression),
 		},
 		Run: func(c *core.CronContext) error {
-			return services.EmailBillImporter.Import(c)
+			_, err := services.EmailBillSync.StartConfigured(c, "schedule")
+			return err
 		},
 	}
 }

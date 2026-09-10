@@ -12,6 +12,9 @@ const (
 
 // Message contains the normalized parts of one matching email.
 type Message struct {
+	Folder        string
+	UID           uint32
+	UIDValidity   uint32
 	Fingerprint   string
 	MessageID     string
 	Sender        string

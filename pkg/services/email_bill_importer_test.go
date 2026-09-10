@@ -115,6 +115,47 @@ type fakeEmailBillMailbox struct {
 	skipMessage   emailbill.MessageFilter
 }
 
+type streamingEmailBillMailbox struct {
+	fakeEmailBillMailbox
+	handler    func(emailbill.Message) error
+	afterBatch error
+}
+
+func (m *streamingEmailBillMailbox) SetMessageHandler(handler func(emailbill.Message) error) {
+	m.handler = handler
+}
+
+func (m *streamingEmailBillMailbox) FetchRecent(context.Context) ([]emailbill.Message, error) {
+	for _, message := range m.messages {
+		if err := m.handler(message); err != nil {
+			return nil, err
+		}
+	}
+	return m.messages, m.afterBatch
+}
+
+func TestEmailBillStreamingPersistsBeforeLaterScanFailure(t *testing.T) {
+	scanErr := errors.New("second folder disconnected")
+	for _, afterBatch := range []error{nil, scanErr} {
+		mailbox := &streamingEmailBillMailbox{fakeEmailBillMailbox: fakeEmailBillMailbox{messages: []emailbill.Message{{MessageID: "first", Authenticated: true}}}, afterBatch: afterBatch}
+		pipeline := &fakeEmailBillPipelineProcessor{}
+		service := &EmailBillImportService{
+			automation: &fakeEmailBillAutomationRules{}, pipeline: pipeline,
+			mailboxFactory: func(*settings.EmailBillConfig, []emailbill.Parser) emailbill.Mailbox { return mailbox },
+		}
+		processed := 0
+		err := service.importWithObserver(core.NewNullContext(), 7, &settings.EmailBillConfig{}, func(event emailbill.ScanEvent) error {
+			if event.Processed {
+				processed++
+			}
+			return nil
+		})
+		require.ErrorIs(t, err, afterBatch)
+		require.Len(t, pipeline.processed, 1, "streamed messages must not be reprocessed from the return value")
+		require.Equal(t, 1, processed)
+	}
+}
+
 type fakeEmailBillAutomationRules struct {
 	rules []emailbill.RunnableParserRule
 }

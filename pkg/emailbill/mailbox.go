@@ -43,6 +43,11 @@ type IMAPMailbox struct {
 	parsers       []Parser
 	messageFilter MessageFilter
 	seenMessages  map[string]struct{}
+	observer      ScanObserver
+	handler       func(Message) error
+	folder        string
+	uidValidity   uint32
+	matchers      []ParserMatcher
 }
 
 // NewIMAPMailbox creates a read-only IMAP mailbox client.
@@ -54,6 +59,8 @@ func NewIMAPMailbox(config MailboxConfig, parsers []Parser) *IMAPMailbox {
 func (m *IMAPMailbox) SetMessageFilter(filter MessageFilter) {
 	m.messageFilter = filter
 }
+
+func (m *IMAPMailbox) SetParserMatchers(matchers []ParserMatcher) { m.matchers = matchers }
 
 // TestConnection verifies TLS, credentials, and read-only INBOX access.
 func (m *IMAPMailbox) TestConnection(ctx context.Context) error {
@@ -76,11 +83,25 @@ func (m *IMAPMailbox) FetchRecent(ctx context.Context) ([]Message, error) {
 		return nil, err
 	}
 	defer func() { _ = imapClient.Logout() }()
+	finished := make(chan struct{})
+	defer close(finished)
+	go func() {
+		select {
+		case <-ctx.Done():
+			_ = imapClient.Terminate()
+		case <-finished:
+		}
+	}()
 	m.seenMessages = make(map[string]struct{})
 
 	folders, err := listMailboxFolders(imapClient)
 	if err != nil {
 		return nil, err
+	}
+	for _, folder := range folders {
+		if err := m.report(ScanEvent{Kind: "folder", Folder: folder, Status: "waiting"}); err != nil {
+			return nil, err
+		}
 	}
 	var messages []Message
 	for _, folder := range folders {
@@ -104,12 +125,20 @@ func (m *IMAPMailbox) FetchRecent(ctx context.Context) ([]Message, error) {
 }
 
 func (m *IMAPMailbox) fetchFolder(ctx context.Context, imapClient *client.Client, folder string, limit uint32) ([]Message, error) {
+	m.folder = folder
+	if err := m.report(ScanEvent{Kind: "folder", Folder: folder, Status: "opening"}); err != nil {
+		return nil, err
+	}
 	status, err := imapClient.Select(folder, true)
 	if err != nil {
 		return nil, err
 	}
+	m.uidValidity = status.UidValidity
+	if err := m.report(ScanEvent{Kind: "folder", Folder: folder, Status: "scanning", Total: status.Messages}); err != nil {
+		return nil, err
+	}
 	if status.Messages == 0 {
-		return nil, nil
+		return nil, m.report(ScanEvent{Kind: "folder", Folder: folder, Status: "completed"})
 	}
 
 	uids, err := m.searchSupportedUIDs(imapClient)
@@ -117,10 +146,10 @@ func (m *IMAPMailbox) fetchFolder(ctx context.Context, imapClient *client.Client
 		return nil, err
 	}
 	if len(uids) == 0 {
-		return nil, nil
+		return nil, m.report(ScanEvent{Kind: "folder", Folder: folder, Status: "completed"})
 	}
 
-	return fetchRecentMessageBatches(ctx, uids, limit, func(batch []uint32, remaining uint32) ([]Message, error) {
+	messages, err := fetchRecentMessageBatches(ctx, uids, limit, func(batch []uint32, remaining uint32) ([]Message, error) {
 		messageDates, err := m.fetchMessageDatesWithinLimit(ctx, imapClient, batch)
 		if err != nil || len(messageDates) == 0 {
 			return nil, err
@@ -130,8 +159,27 @@ func (m *IMAPMailbox) fetchFolder(ctx context.Context, imapClient *client.Client
 			return nil, err
 		}
 		messageDates = newestMessageDates(messageDates, remaining)
-		return m.fetchAuthenticatedBodies(ctx, imapClient, sortedUIDs(messageDates), messageDates)
+		messages, err := m.fetchAuthenticatedBodies(ctx, imapClient, sortedUIDs(messageDates), messageDates)
+		// No IMAP response channel is active while parsing or calling the LLM.
+		if m.handler != nil {
+			for index, message := range messages {
+				if err := m.handler(message); err != nil {
+					return nil, err
+				}
+				// Preserve the global count without retaining every downloaded body.
+				messages[index].Text, messages[index].Headers = "", nil
+			}
+		}
+		return messages, err
 	})
+	if err != nil {
+		return nil, err
+	}
+	outcome := "completed"
+	if limit > 0 && uint32(len(messages)) >= limit {
+		outcome = "limited"
+	}
+	return messages, m.report(ScanEvent{Kind: "folder", Folder: folder, Status: outcome})
 }
 
 func listMailboxFolders(imapClient *client.Client) ([]string, error) {
@@ -253,7 +301,7 @@ func (m *IMAPMailbox) openConnection(ctx context.Context) (*client.Client, error
 
 func (m *IMAPMailbox) fetchMessageDatesWithinLimit(ctx context.Context, imapClient *client.Client, uids []uint32) (map[uint32]time.Time, error) {
 	sequenceSet := sequenceSetForUIDs(uids)
-	fetched := make(chan *imap.Message)
+	fetched := make(chan *imap.Message, len(uids))
 	fetchErr := make(chan error, 1)
 	go func() {
 		fetchErr <- imapClient.UidFetch(sequenceSet, []imap.FetchItem{
@@ -279,6 +327,10 @@ func (m *IMAPMailbox) fetchMessageDatesWithinLimit(ctx context.Context, imapClie
 				continue
 			}
 			if fetchedMessage.Size > m.maxMessageBytes() {
+				message := m.located(Message{ReceivedAt: fetchedMessage.InternalDate}, fetchedMessage.Uid)
+				if err := m.report(ScanEvent{Kind: "message", Message: &message, Status: "oversized", Reason: "Message exceeds the configured size limit", Scanned: true}); err != nil {
+					return nil, err
+				}
 				continue
 			}
 			messageDates[fetchedMessage.Uid] = fetchedMessage.InternalDate
@@ -296,7 +348,7 @@ func (m *IMAPMailbox) fetchAuthenticatedHeaders(ctx context.Context, imapClient 
 		Peek:    true,
 		Partial: []int{0, int(m.maxMessageBytes()) + 1},
 	}
-	fetched := make(chan *imap.Message)
+	fetched := make(chan *imap.Message, len(uids))
 	fetchErr := make(chan error, 1)
 	go func() {
 		fetchErr <- imapClient.UidFetch(sequenceSet, []imap.FetchItem{
@@ -322,14 +374,33 @@ func (m *IMAPMailbox) fetchAuthenticatedHeaders(ctx context.Context, imapClient 
 			}
 			header := fetchedMessage.GetBody(headerSection)
 			if header == nil {
+				message := m.located(Message{ReceivedAt: messageDates[fetchedMessage.Uid]}, fetchedMessage.Uid)
+				if err := m.report(ScanEvent{Kind: "message", Message: &message, Status: "failed", Reason: "IMAP returned no message headers", Scanned: true}); err != nil {
+					return nil, err
+				}
 				continue
 			}
 			decoded, decodeErr := DecodeMessageHeadersWithLimit(header, m.config.Security, messageDates[fetchedMessage.Uid], m.maxMessageBytes())
-			if decodeErr != nil || !decoded.Authenticated || !m.supported(decoded) {
+			decoded = m.located(decoded, fetchedMessage.Uid)
+			status, reason := "ready", ""
+			if decodeErr != nil {
+				status, reason = "failed", decodeErr.Error()
+			} else if !decoded.Authenticated {
+				status, reason = "rejected", "Email authentication failed"
+			} else if !m.supported(decoded) {
+				status, reason = "not_matched", "No enabled parser rule matches this sender and subject"
+			}
+			if status != "ready" {
+				if err := m.report(ScanEvent{Kind: "message", Message: &decoded, Status: status, Reason: reason, Scanned: true}); err != nil {
+					return nil, err
+				}
 				continue
 			}
 			if decoded.MessageID != "" {
 				if _, seen := m.seenMessages[mailboxMessageIdentity(decoded)]; seen {
+					if err := m.report(ScanEvent{Kind: "message", Message: &decoded, Status: "duplicate", Reason: "Message already downloaded from another folder", Scanned: true}); err != nil {
+						return nil, err
+					}
 					continue
 				}
 			}
@@ -339,8 +410,14 @@ func (m *IMAPMailbox) fetchAuthenticatedHeaders(ctx context.Context, imapClient 
 					return nil, fmt.Errorf("filter IMAP message: %w", filterErr)
 				}
 				if !include {
+					if err := m.report(ScanEvent{Kind: "message", Message: &decoded, Status: "duplicate", Reason: "Message already processed", Scanned: true}); err != nil {
+						return nil, err
+					}
 					continue
 				}
+			}
+			if err := m.report(ScanEvent{Kind: "message", Message: &decoded, Status: "ready", Scanned: true}); err != nil {
+				return nil, err
 			}
 			authenticatedDates[fetchedMessage.Uid] = messageDates[fetchedMessage.Uid]
 		}
@@ -353,7 +430,7 @@ func (m *IMAPMailbox) fetchAuthenticatedBodies(ctx context.Context, imapClient *
 		Peek:    true,
 		Partial: []int{0, int(m.maxMessageBytes()) + 1},
 	}
-	fetched := make(chan *imap.Message)
+	fetched := make(chan *imap.Message, len(uids))
 	fetchErr := make(chan error, 1)
 	go func() {
 		fetchErr <- imapClient.UidFetch(sequenceSet, []imap.FetchItem{
@@ -370,7 +447,7 @@ func (m *IMAPMailbox) fetchAuthenticatedBodies(ctx context.Context, imapClient *
 		case fetchedMessage, ok := <-fetched:
 			if !ok {
 				if err := <-fetchErr; err != nil {
-					return nil, fmt.Errorf("fetch IMAP message bodies: %w", err)
+					return messages, fmt.Errorf("fetch IMAP message bodies: %w", err)
 				}
 				return messages, nil
 			}
@@ -379,14 +456,31 @@ func (m *IMAPMailbox) fetchAuthenticatedBodies(ctx context.Context, imapClient *
 			}
 			body := fetchedMessage.GetBody(section)
 			if body == nil {
+				message := m.located(Message{ReceivedAt: messageDates[fetchedMessage.Uid]}, fetchedMessage.Uid)
+				if err := m.report(ScanEvent{Kind: "message", Message: &message, Status: "failed", Reason: "IMAP returned no message body"}); err != nil {
+					return messages, err
+				}
 				continue
 			}
 			decoded, decodeErr := DecodeMessageWithLimit(body, m.config.Security, messageDates[fetchedMessage.Uid], m.maxMessageBytes())
+			decoded = m.located(decoded, fetchedMessage.Uid)
 			if decodeErr != nil || !decoded.Authenticated || !m.supported(decoded) {
+				reason := "Email authentication or parser matching failed after downloading"
+				if decodeErr != nil {
+					reason = decodeErr.Error()
+				}
+				if err := m.report(ScanEvent{Kind: "message", Message: &decoded, Status: "failed", Reason: reason}); err != nil {
+					return nil, err
+				}
 				continue
 			}
 			if m.acceptFetchedMessage(decoded) {
+				if err := m.report(ScanEvent{Kind: "message", Message: &decoded, Status: "downloaded", Downloaded: true}); err != nil {
+					return nil, err
+				}
 				messages = append(messages, decoded)
+			} else if err := m.report(ScanEvent{Kind: "message", Message: &decoded, Status: "duplicate", Reason: "Message already downloaded"}); err != nil {
+				return messages, err
 			}
 		}
 	}
@@ -483,6 +577,14 @@ func newestMessageDates(messageDates map[uint32]time.Time, limit uint32) map[uin
 }
 
 func (m *IMAPMailbox) supported(message Message) bool {
+	if m.matchers != nil {
+		for _, matcher := range m.matchers {
+			if matcher.Matches(ScriptMail{Sender: message.Sender, Subject: message.Subject}) {
+				return true
+			}
+		}
+		return false
+	}
 	if len(m.parsers) == 0 {
 		return true
 	}
