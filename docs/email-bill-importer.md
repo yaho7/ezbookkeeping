@@ -199,4 +199,4 @@ def parse(mail):
 
 ## Action 与镜像
 
-`.github/workflows/docker-publish.yml` 在每次 push 后构建 amd64 和 arm64 镜像，先发布提交不可变标签，再在确认提交仍是分支最新提交时更新分支标签及 `main` 的 `latest`。工作流不会修改仓库或产生新提交，因此不会形成 Action 自触发循环。
+`.github/workflows/docker-publish.yml` 在分支推送时构建 amd64 和 arm64 镜像，也可以手动触发。版本 tag 发布交给原有 release 工作流，避免重复构建。两个架构各构建一次，随后一个发布任务用一次 manifest 发布同时写入提交不可变标签，以及仍为最新提交时的分支标签和 `main` 的 `latest`。保留构建缓存与分支最新提交检查，删除重复的发布任务、登录、Buildx 初始化和仓库检出。工作流不会修改仓库或产生新提交。

@@ -2,6 +2,8 @@ name: Build and Publish Docker Image
 
 on:
   push:
+    branches:
+      - '**'
   workflow_dispatch:
 
 permissions:
@@ -50,45 +52,15 @@ jobs:
           cache-from: type=gha,scope=ezbookkeeping-${{ matrix.suffix }}
           cache-to: type=gha,mode=max,scope=ezbookkeeping-${{ matrix.suffix }}
 
-  publish-image:
-    name: Publish multi-architecture image
+  publish:
+    name: Publish image and branch tags
     needs: build
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Log in to GHCR
-        uses: docker/login-action@v4
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4
-
-      - name: Publish immutable image
-        shell: bash
-        env:
-          IMAGE: ghcr.io/${{ github.repository }}
-        run: |
-          docker buildx imagetools create \
-            --tag "${IMAGE}:sha-${GITHUB_SHA}" \
-            "${IMAGE}:sha-${GITHUB_SHA}-amd64" \
-            "${IMAGE}:sha-${GITHUB_SHA}-arm64"
-
-  publish-tags:
-    name: Publish current branch tags
-    needs: publish-image
-    if: github.ref_type == 'branch'
     runs-on: ubuntu-latest
     concurrency:
       group: docker-mutable-tags-${{ github.ref }}
       cancel-in-progress: false
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v6
-
       - name: Log in to GHCR
         uses: docker/login-action@v4
         with:
@@ -100,6 +72,7 @@ jobs:
         uses: docker/setup-buildx-action@v4
 
       - name: Generate branch image metadata
+        if: github.ref_type == 'branch'
         id: branch_meta
         uses: docker/metadata-action@v6
         with:
@@ -108,23 +81,27 @@ jobs:
             type=ref,event=branch
             type=raw,value=latest,enable={{is_default_branch}}
 
-      - name: Publish current branch tags
+      - name: Publish image
         shell: bash
         env:
-          SOURCE_IMAGE: ghcr.io/${{ github.repository }}:sha-${{ github.sha }}
+          IMAGE: ghcr.io/${{ github.repository }}
           BRANCH_TAGS: ${{ steps.branch_meta.outputs.tags }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
-          current_sha="$(git ls-remote --refs origin "refs/heads/${GITHUB_REF_NAME}" | awk '{print $1}')"
-          if [[ "${current_sha}" != "${GITHUB_SHA}" ]]; then
-            echo "Skipping mutable tags because this commit is no longer the branch head."
-            exit 0
-          fi
-
-          tag_args=()
-          while IFS= read -r tag; do
-            if [[ -n "${tag}" ]]; then
-              tag_args+=(--tag "${tag}")
+          tag_args=(--tag "${IMAGE}:sha-${GITHUB_SHA}")
+          if [[ "${GITHUB_REF_TYPE}" == "branch" ]]; then
+            current_sha="$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/heads/${GITHUB_REF_NAME}" --jq '.object.sha')"
+            if [[ "${current_sha}" == "${GITHUB_SHA}" ]]; then
+              while IFS= read -r tag; do
+                if [[ -n "${tag}" ]]; then
+                  tag_args+=(--tag "${tag}")
+                fi
+              done <<< "${BRANCH_TAGS}"
+            else
+              echo "Publishing only the immutable tag because this commit is no longer the branch head."
             fi
-          done <<< "${BRANCH_TAGS}"
-          docker buildx imagetools create "${tag_args[@]}" "${SOURCE_IMAGE}"
+          fi
+          docker buildx imagetools create "${tag_args[@]}" \
+            "${IMAGE}:sha-${GITHUB_SHA}-amd64" \
+            "${IMAGE}:sha-${GITHUB_SHA}-arm64"
