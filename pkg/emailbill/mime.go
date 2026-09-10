@@ -19,8 +19,10 @@ import (
 )
 
 var (
-	dkimDomainPattern = regexp.MustCompile(`header\.(?:d|i)\s*=\s*([^\s;]+)`)
-	spfSenderPattern  = regexp.MustCompile(`smtp\.(?:mailfrom|helo)\s*=\s*([^\s;]+)`)
+	dkimDomainPattern   = regexp.MustCompile(`header\.(?:d|i)\s*=\s*`)
+	spfSenderPattern    = regexp.MustCompile(`smtp\.(?:mailfrom|helo)\s*=\s*`)
+	authPropertyPattern = regexp.MustCompile(`\s+[a-z][a-z0-9_.-]*\s*=`)
+	authPassPattern     = regexp.MustCompile(`^\s*(dkim|spf)\s*=\s*pass(?:\s|\(|$)`)
 )
 
 // DefaultMaxMessageBytes is the maximum RFC 5322 message size decoded by default.
@@ -231,14 +233,17 @@ func authenticationResultsValid(header string, security MessageSecurity) bool {
 	}
 
 	for _, result := range parts[1:] {
-		if strings.Contains(result, "dkim=pass") {
-			if match := dkimDomainPattern.FindStringSubmatch(result); match != nil && domainMatches(strings.TrimPrefix(match[1], "@"), "cmbchina.com") {
+		method := authPassPattern.FindStringSubmatch(result)
+		if method == nil {
+			continue
+		}
+		if method[1] == "dkim" {
+			if identity := authenticationIdentity(result, dkimDomainPattern); identity != "" && domainMatches(strings.TrimPrefix(identity, "@"), "cmbchina.com") {
 				return true
 			}
 		}
-		if strings.Contains(result, "spf=pass") {
-			if match := spfSenderPattern.FindStringSubmatch(result); match != nil {
-				identity := strings.Trim(match[1], "<>\"")
+		if method[1] == "spf" {
+			if identity := authenticationIdentity(result, spfSenderPattern); identity != "" {
 				if at := strings.LastIndex(identity, "@"); at >= 0 {
 					identity = identity[at+1:]
 				}
@@ -249,6 +254,24 @@ func authenticationResultsValid(header string, security MessageSecurity) bool {
 		}
 	}
 	return false
+}
+
+// QQ folds long Authentication-Results inside domain names and mailbox values.
+// Recover whitespace within one property only; never join separate properties,
+// result clauses or authserv identities, and still require an exact domain suffix.
+func authenticationIdentity(result string, property *regexp.Regexp) string {
+	position := property.FindStringIndex(result)
+	if position == nil {
+		return ""
+	}
+	value := result[position[1]:]
+	if next := authPropertyPattern.FindStringIndex(value); next != nil {
+		value = value[:next[0]]
+	}
+	if comment := strings.IndexByte(value, '('); comment >= 0 {
+		value = value[:comment]
+	}
+	return strings.Trim(strings.Join(strings.Fields(value), ""), "<>\"")
 }
 
 func domainMatchesAny(domain string, allowed []string) bool {
