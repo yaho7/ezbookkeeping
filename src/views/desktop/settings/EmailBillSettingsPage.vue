@@ -9,11 +9,12 @@
                     </v-chip>
                     <v-spacer />
                     <v-btn prepend-icon="$refresh" variant="text" :loading="loading" @click="loadPage">{{ tt('Refresh') }}</v-btn>
-                    <v-btn color="primary" prepend-icon="$play" :loading="running" :disabled="!settings.enabled && !taskActive" @click="runNow">{{ tt(taskActive ? 'View Progress' : 'Run Now') }}</v-btn>
+                    <v-btn color="primary" prepend-icon="$play" :loading="running" :disabled="(!settings.enabled || folderScopeDirty) && !taskActive" @click="runNow">{{ tt(taskActive ? 'View Progress' : 'Run Now') }}</v-btn>
                 </v-card-title>
                 <v-card-subtitle class="pb-3 text-wrap">
                     {{ tt('Import bank emails through independent parsers, routing rules and auditable classification decisions.') }}
                 </v-card-subtitle>
+                <v-alert v-if="folderScopeDirty" class="mx-4 mb-3" type="info" variant="tonal" density="compact">{{ tt('Save the folder selection before running a new scan.') }}</v-alert>
 
                 <v-tabs v-model="activeTab" color="primary" show-arrows>
                     <v-tab value="workspace">{{ tt('Email Workspace') }}</v-tab>
@@ -45,6 +46,21 @@
                                 <v-col cols="12" md="4">
                                     <v-text-field type="password" :label="tt('Mailbox Password')" :placeholder="settings.passwordConfigured ? tt('Saved; leave blank to keep') : ''" v-model="mailPassword" />
                                 </v-col>
+                                <v-col cols="12">
+                                    <div class="d-flex align-center flex-wrap ga-3 mb-2">
+                                        <h3 class="text-subtitle-1">{{ tt('Folder Scan Scope') }}</h3>
+                                        <v-spacer />
+                                        <v-btn variant="tonal" :loading="discoveringFolders" @click="discoverFolders">{{ tt('Read Folders') }}</v-btn>
+                                    </div>
+                                    <p class="text-body-2 text-medium-emphasis mb-3">{{ tt('Read the folder list first, then select folders and save. Reading folders does not scan emails.') }}</p>
+                                    <v-radio-group v-model="settings.folderMode" inline hide-details class="mb-3">
+                                        <v-radio value="selected" :label="tt('Selected Folders Only')" />
+                                        <v-radio value="all" :label="tt('All Folders')" />
+                                    </v-radio-group>
+                                    <v-select v-if="settings.folderMode === 'selected'" v-model="settings.folders" :items="selectableFolders" multiple chips closable-chips :label="tt('Folders to Scan')" :error-messages="!settings.folders.length ? [tt('Select at least one email folder')] : []" />
+                                    <v-alert v-if="folderDiscoveryDone && !discoveredFolders.length" type="info" variant="tonal" density="compact">{{ tt('No selectable folders were returned by the mailbox.') }}</v-alert>
+                                    <p class="text-caption text-medium-emphasis">{{ tt('Saved scope applies to manual and scheduled runs. The current task keeps its original scope.') }}</p>
+                                </v-col>
                                 <v-col cols="12" md="4"><v-select :label="tt('Schedule Type')" :items="scheduleModes" item-title="title" item-value="value" v-model="scheduleMode" /></v-col>
                                 <v-col cols="12" md="4" v-if="scheduleMode !== 'advanced'"><v-text-field type="time" :label="tt('Run Time')" v-model="scheduleTime" /></v-col>
                                 <v-col cols="12" md="4" v-if="scheduleMode === 'weekly'"><v-select :label="tt('Weekday')" :items="weekdays" item-title="title" item-value="value" v-model="scheduleWeekday" /></v-col>
@@ -57,7 +73,7 @@
                                 <v-col cols="12" md="4"><v-text-field type="number" min="1" max="365" :disabled="!settings.retainRawEmails" :label="tt('Raw Email Retention Days')" v-model.number="settings.rawEmailRetentionDays" /></v-col>
                             </v-row>
                         </v-card-text>
-                        <v-card-actions class="px-6 pb-5"><v-spacer /><v-btn variant="tonal" :loading="testingMailbox" @click="testMailbox">{{ tt('Test Connection') }}</v-btn><v-btn color="primary" :loading="saving" @click="saveSettings">{{ tt('Save') }}</v-btn></v-card-actions>
+                        <v-card-actions class="px-6 pb-5"><v-spacer /><v-btn variant="tonal" :loading="testingMailbox" @click="testMailbox">{{ tt('Test Connection') }}</v-btn><v-btn color="primary" :loading="saving" :disabled="settings.folderMode === 'selected' && !settings.folders.length" @click="saveSettings">{{ tt('Save') }}</v-btn></v-card-actions>
                     </v-card>
                 </v-window-item>
 
@@ -184,6 +200,9 @@ const saving = ref(false);
 const running = ref(false);
 const testing = ref(false);
 const testingMailbox = ref(false);
+const discoveringFolders = ref(false);
+const discoveredFolders = ref<string[]>([]);
+const folderDiscoveryDone = ref(false);
 const generating = ref(false);
 const parserDialog = ref(false);
 const routeDialog = ref(false);
@@ -202,7 +221,10 @@ const testMessageId = ref<string | null>(null);
 const parserSenders = ref('');
 const parserSubjects = ref('');
 
-const settings = reactive<EmailBillSettings>({ enabled: false, imapServer: '', imapPort: 993, mailUser: '', passwordConfigured: false, timezone: 'Asia/Shanghai', cronExpression: '0 8 * * *', maxEmails: 50, retainRawEmails: false, rawEmailRetentionDays: 30 });
+const settings = reactive<EmailBillSettings>({ folderMode: 'all', folders: [], enabled: false, imapServer: '', imapPort: 993, mailUser: '', passwordConfigured: false, timezone: 'Asia/Shanghai', cronExpression: '0 8 * * *', maxEmails: 50, retainRawEmails: false, rawEmailRetentionDays: 30 });
+const selectableFolders = computed(() => [...new Set([...discoveredFolders.value, ...settings.folders])]);
+const folderScopeDirty = computed(() => settings.folderMode !== (store.settings?.folderMode || 'all') ||
+    (settings.folderMode === 'selected' && JSON.stringify([...settings.folders].sort()) !== JSON.stringify([...(store.settings?.folders || [])].sort())));
 const parserDraft = reactive<EmailBillParserRule>(createEmailBillParserRule());
 const routeDraft = reactive<EmailBillRoutingRule>(emptyRoute());
 const classificationDraft = reactive<EmailBillClassificationRule>(emptyClassification());
@@ -235,6 +257,7 @@ async function loadPage(): Promise<void> {
 }
 
 async function saveSettings(): Promise<void> {
+    if (settings.folderMode === 'selected' && !settings.folders.length) { showError(new Error(tt('Select at least one email folder'))); return; }
     saving.value = true;
     try {
         settings.cronExpression = buildSchedule();
@@ -245,7 +268,21 @@ async function saveSettings(): Promise<void> {
     } catch (error) { showError(error); } finally { saving.value = false; }
 }
 
+async function discoverFolders(): Promise<void> {
+    discoveringFolders.value = true;
+    const connection = JSON.stringify([settings.imapServer, settings.imapPort, settings.mailUser, mailPassword.value]);
+    try {
+        const folders = resultOf(await services.discoverEmailBillFolders({ ...settings, mailPassword: mailPassword.value || undefined }));
+        if (connection !== JSON.stringify([settings.imapServer, settings.imapPort, settings.mailUser, mailPassword.value])) return;
+        discoveredFolders.value = folders;
+        folderDiscoveryDone.value = true;
+        settings.folderMode = 'selected';
+    } catch (error) { showError(error); }
+    finally { discoveringFolders.value = false; }
+}
+
 async function runNow(): Promise<void> {
+    if (folderScopeDirty.value && !taskActive.value) { activeTab.value = 'mailbox'; return; }
     activeTab.value = 'workspace';
     running.value = true;
     try { await nextTick(); await mailboxWorkspace.value?.start(); }

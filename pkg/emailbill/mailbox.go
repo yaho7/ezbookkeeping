@@ -28,6 +28,8 @@ type MessageFilter func(context.Context, Message) (bool, error)
 
 // MailboxConfig contains the connection and security settings used by IMAPMailbox.
 type MailboxConfig struct {
+	FolderMode      string
+	Folders         []string
 	Server          string
 	Port            uint16
 	Username        string
@@ -97,6 +99,12 @@ func (m *IMAPMailbox) FetchRecent(ctx context.Context) ([]Message, error) {
 	folders, err := listMailboxFolders(imapClient)
 	if err != nil {
 		return nil, err
+	}
+	if m.config.FolderMode == "selected" {
+		folders, err = selectedMailboxFolders(folders, m.config.Folders)
+		if err != nil {
+			return nil, err
+		}
 	}
 	for _, folder := range folders {
 		if err := m.report(ScanEvent{Kind: "folder", Folder: folder, Status: "waiting"}); err != nil {

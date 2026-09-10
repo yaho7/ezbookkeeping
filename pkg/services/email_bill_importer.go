@@ -291,6 +291,8 @@ func (s *EmailBillImportService) createTransaction(c core.Context, transaction *
 
 func newEmailBillMailbox(config *settings.EmailBillConfig, parsers []emailbill.Parser) emailbill.Mailbox {
 	return emailbill.NewIMAPMailbox(emailbill.MailboxConfig{
+		FolderMode:      config.FolderMode,
+		Folders:         append([]string(nil), config.Folders...),
 		Server:          config.IMAPServer,
 		Port:            config.IMAPPort,
 		Username:        config.MailUser,
@@ -340,6 +342,21 @@ func (s *EmailBillImportService) TestConnection(c core.Context, config *settings
 		return fmt.Errorf("mailbox connection test is not supported")
 	}
 	return tester.TestConnection(c)
+}
+
+// ListFolders discovers selectable directories without selecting or fetching messages.
+func (s *EmailBillImportService) ListFolders(c core.Context, config *settings.EmailBillConfig) ([]string, error) {
+	if config == nil || config.IMAPServer == "" || config.IMAPPort == 0 || config.MailUser == "" || config.MailPassword == "" {
+		return nil, fmt.Errorf("IMAP server, port, user and password are required")
+	}
+	mailbox := s.mailboxFactory(config, nil)
+	lister, ok := mailbox.(interface {
+		ListFolders(context.Context) ([]string, error)
+	})
+	if !ok {
+		return nil, fmt.Errorf("mailbox folder discovery is not supported")
+	}
+	return lister.ListFolders(c)
 }
 
 func buildEmailBillTransaction(c core.Context, uid int64, config *settings.EmailBillConfig, parsed emailbill.ParsedTransaction, marker string) *models.Transaction {

@@ -1,4 +1,6 @@
 export interface EmailBillSettings {
+    folderMode: 'all' | 'selected';
+    folders: string[];
     enabled: boolean;
     imapServer: string;
     imapPort: number;

@@ -478,6 +478,9 @@ export default {
     testEmailBillSettings: (req: EmailBillSettings): ApiResponsePromise<boolean> => {
         return axios.post<ApiResponse<boolean>>('v1/users/settings/email_bill/test.json', req, { timeout: DEFAULT_LLM_API_TIMEOUT });
     },
+    discoverEmailBillFolders: (req: EmailBillSettings): ApiResponsePromise<string[]> => {
+        return axios.post<ApiResponse<string[]>>('v1/users/settings/email_bill/folders.json', req, { timeout: DEFAULT_LLM_API_TIMEOUT });
+    },
     runEmailBillImport: (): ApiResponsePromise<EmailBillSyncTask> => {
         return axios.post<ApiResponse<EmailBillSyncTask>>('v1/users/settings/email_bill/run.json');
     },

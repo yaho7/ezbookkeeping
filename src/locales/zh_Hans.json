@@ -3016,5 +3016,14 @@
     "Loading...": "加载中…",
     "Imported": "已入账",
     "Processing": "处理中",
-    "Awaiting classification": "等待分类"
+    "Awaiting classification": "等待分类",
+    "Folder Scan Scope": "扫描目录范围",
+    "Read Folders": "读取文件夹",
+    "Read the folder list first, then select folders and save. Reading folders does not scan emails.": "先读取目录，再勾选并保存。读取目录不会扫描邮件。",
+    "Selected Folders Only": "只扫描指定文件夹",
+    "Folders to Scan": "要扫描的文件夹",
+    "Select at least one email folder": "请至少选择一个邮件文件夹",
+    "No selectable folders were returned by the mailbox.": "邮箱没有返回可选择的文件夹。",
+    "Saved scope applies to manual and scheduled runs. The current task keeps its original scope.": "保存后对手动和定时任务生效，当前运行中的任务仍使用原范围。",
+    "Save the folder selection before running a new scan.": "目录选择尚未保存，请保存后再运行扫描。"
 }

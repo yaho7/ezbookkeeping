@@ -1,6 +1,7 @@
 package settings
 
 import (
+	"encoding/json"
 	"fmt"
 	"net"
 	"os"
@@ -245,6 +246,8 @@ type SMTPConfig struct {
 
 // EmailBillConfig represents the built-in email bill importer configuration.
 type EmailBillConfig struct {
+	FolderMode            string
+	Folders               []string
 	Enabled               bool
 	TargetUser            string
 	IMAPServer            string
@@ -1061,6 +1064,7 @@ func loadCronConfiguration(config *Config, configFile *ini.File, sectionName str
 
 func loadEmailBillConfiguration(config *Config, configFile *ini.File, sectionName string) error {
 	emailBillConfig := &EmailBillConfig{
+		FolderMode:            getConfigItemStringValue(configFile, sectionName, "folder_mode", "all"),
 		Enabled:               getConfigItemBoolValue(configFile, sectionName, "enabled", false),
 		TargetUser:            strings.TrimSpace(getConfigItemStringValue(configFile, sectionName, "target_user")),
 		IMAPServer:            strings.TrimSpace(getConfigItemStringValue(configFile, sectionName, "imap_server")),
@@ -1075,6 +1079,9 @@ func loadEmailBillConfiguration(config *Config, configFile *ini.File, sectionNam
 		RawEmailRetentionDays: getConfigItemUint32Value(configFile, sectionName, "raw_email_retention_days", 30),
 	}
 	config.EmailBillConfig = emailBillConfig
+	if err := json.Unmarshal([]byte(getConfigItemStringValue(configFile, sectionName, "folders", "[]")), &emailBillConfig.Folders); err != nil {
+		return fmt.Errorf("invalid email bill folder list: %w", err)
+	}
 
 	var err error
 	emailBillConfig.CMBCreditAccountID, err = getOptionalConfigItemInt64Value(configFile, sectionName, "cmb_credit_account_id")
@@ -1101,6 +1108,23 @@ func loadEmailBillConfiguration(config *Config, configFile *ini.File, sectionNam
 func NormalizeEmailBillConfiguration(emailBillConfig *EmailBillConfig) error {
 	if emailBillConfig == nil {
 		return fmt.Errorf("email bill configuration is required")
+	}
+	if emailBillConfig.FolderMode == "" {
+		emailBillConfig.FolderMode = "all"
+	}
+	if emailBillConfig.FolderMode != "all" && emailBillConfig.FolderMode != "selected" {
+		return fmt.Errorf("email bill folder mode must be all or selected")
+	}
+	if emailBillConfig.FolderMode == "selected" && len(emailBillConfig.Folders) == 0 {
+		return fmt.Errorf("Select at least one email folder")
+	}
+	if len(emailBillConfig.Folders) > 200 {
+		return fmt.Errorf("too many selected email folders")
+	}
+	for _, folder := range emailBillConfig.Folders {
+		if strings.TrimSpace(folder) == "" || len(folder) > 1000 || strings.ContainsAny(folder, "\x00\r\n") {
+			return fmt.Errorf("invalid email folder name")
+		}
 	}
 
 	emailBillConfig.TargetUser = strings.TrimSpace(emailBillConfig.TargetUser)

@@ -71,6 +71,7 @@ func cloneEmailBillConfig(config *EmailBillConfig) *EmailBillConfig {
 	}
 
 	cloned := *config
+	cloned.Folders = append([]string(nil), config.Folders...)
 	return &cloned
 }
 

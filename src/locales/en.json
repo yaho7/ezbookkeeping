@@ -3016,5 +3016,14 @@
     "Loading...": "Loading...",
     "Imported": "Imported",
     "Processing": "Processing",
-    "Awaiting classification": "Awaiting classification"
+    "Awaiting classification": "Awaiting classification",
+    "Folder Scan Scope": "Folder Scan Scope",
+    "Read Folders": "Read Folders",
+    "Read the folder list first, then select folders and save. Reading folders does not scan emails.": "Read the folder list first, then select folders and save. Reading folders does not scan emails.",
+    "Selected Folders Only": "Selected Folders Only",
+    "Folders to Scan": "Folders to Scan",
+    "Select at least one email folder": "Select at least one email folder",
+    "No selectable folders were returned by the mailbox.": "No selectable folders were returned by the mailbox.",
+    "Saved scope applies to manual and scheduled runs. The current task keeps its original scope.": "Saved scope applies to manual and scheduled runs. The current task keeps its original scope.",
+    "Save the folder selection before running a new scan.": "Save the folder selection before running a new scan."
 }

@@ -102,6 +102,7 @@ func (s *EmailBillSyncService) Start(c core.Context, uid int64, config *settings
 	s.active[uid] = task.TaskId
 	// No request context or mutable configuration is captured by the goroutine.
 	configCopy, taskCopy := *config, *task
+	configCopy.Folders = append([]string(nil), config.Folders...)
 	go s.run(&taskCopy, &configCopy)
 	return syncInfo(task), nil
 }

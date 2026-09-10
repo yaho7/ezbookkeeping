@@ -2920,5 +2920,14 @@
     "Review & Audit": "審核與稽核",
     "Updated": "更新時間",
     "bills": "筆帳單",
-    "Not Matched": "未符合"
+    "Not Matched": "未符合",
+    "Folder Scan Scope": "掃描資料夾範圍",
+    "Read Folders": "讀取資料夾",
+    "Read the folder list first, then select folders and save. Reading folders does not scan emails.": "先讀取資料夾，再勾選並儲存。讀取資料夾不會掃描郵件。",
+    "Selected Folders Only": "只掃描指定資料夾",
+    "Folders to Scan": "要掃描的資料夾",
+    "Select at least one email folder": "請至少選擇一個郵件資料夾",
+    "No selectable folders were returned by the mailbox.": "信箱沒有傳回可選擇的資料夾。",
+    "Saved scope applies to manual and scheduled runs. The current task keeps its original scope.": "儲存後對手動與排程工作生效，目前執行中的工作仍使用原範圍。",
+    "Save the folder selection before running a new scan.": "資料夾選擇尚未儲存，請儲存後再執行掃描。"
 }

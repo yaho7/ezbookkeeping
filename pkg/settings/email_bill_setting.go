@@ -1,6 +1,7 @@
 package settings
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -20,7 +21,13 @@ func SaveEmailBillConfiguration(configFilePath string, config *EmailBillConfig) 
 		return err
 	}
 
+	folders, err := json.Marshal(config.Folders)
+	if err != nil {
+		return err
+	}
 	values := map[string]string{
+		"folder_mode":              config.FolderMode,
+		"folders":                  string(folders),
 		"enabled":                  strconv.FormatBool(config.Enabled),
 		"target_user":              config.TargetUser,
 		"imap_server":              config.IMAPServer,

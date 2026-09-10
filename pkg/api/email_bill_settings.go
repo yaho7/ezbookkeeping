@@ -117,6 +117,8 @@ func (a *EmailBillSettingsApi) TestHandler(c *core.WebContext) (any, *errs.Error
 	if err := c.ShouldBindJSON(request); err != nil {
 		return false, errs.NewIncompleteOrIncorrectSubmissionError(err)
 	}
+	// Connection testing does not depend on a completed folder selection.
+	request.FolderMode, request.Folders = "all", nil
 	user, err := a.users.GetUserById(c, c.GetCurrentUid())
 	if err != nil {
 		return false, errs.Or(err, errs.ErrUserNotFound)
@@ -138,6 +140,36 @@ func (a *EmailBillSettingsApi) TestHandler(c *core.WebContext) (any, *errs.Error
 	return true, nil
 }
 
+// FoldersHandler lists selectable directories using submitted or saved credentials.
+// Discovery neither saves settings nor starts an import.
+func (a *EmailBillSettingsApi) FoldersHandler(c *core.WebContext) (any, *errs.Error) {
+	request := &models.EmailBillSettingsUpdateRequest{}
+	if err := c.ShouldBindJSON(request); err != nil {
+		return nil, errs.NewIncompleteOrIncorrectSubmissionError(err)
+	}
+	user, err := a.users.GetUserById(c, c.GetCurrentUid())
+	if err != nil {
+		return nil, errs.Or(err, errs.ErrUserNotFound)
+	}
+	config := a.container.GetCurrentConfig()
+	if config == nil {
+		return nil, errs.ErrOperationFailed
+	}
+	if config.EmailBillConfig != nil && config.EmailBillConfig.TargetUser != "" && config.EmailBillConfig.TargetUser != user.Username {
+		return nil, errs.ErrNotPermittedToPerformThisAction
+	}
+	request.FolderMode, request.Folders = "all", nil
+	emailConfig, err := buildEmailBillConfig(user.Username, request, config.EmailBillConfig)
+	if err != nil {
+		return nil, errs.NewIncompleteOrIncorrectSubmissionError(err)
+	}
+	folders, err := services.EmailBillImporter.ListFolders(c, emailConfig)
+	if err != nil {
+		return nil, errs.Or(err, errs.ErrOperationFailed)
+	}
+	return folders, nil
+}
+
 func buildEmailBillConfig(username string, request *models.EmailBillSettingsUpdateRequest, current *settings.EmailBillConfig) (*settings.EmailBillConfig, error) {
 	password := strings.TrimSpace(request.MailPassword)
 	maxMessageBytes := uint32(2 * 1024 * 1024)
@@ -150,7 +182,13 @@ func buildEmailBillConfig(username string, request *models.EmailBillSettingsUpda
 		}
 	}
 
+	folderMode, folders := request.FolderMode, request.Folders
+	// Older clients omit these fields; saving unrelated settings must not widen a saved scope.
+	if folderMode == "" && current != nil {
+		folderMode, folders = current.FolderMode, current.Folders
+	}
 	config := &settings.EmailBillConfig{
+		FolderMode: folderMode, Folders: append([]string(nil), folders...),
 		Enabled:               request.Enabled,
 		TargetUser:            username,
 		IMAPServer:            request.IMAPServer,
@@ -168,7 +206,12 @@ func buildEmailBillConfig(username string, request *models.EmailBillSettingsUpda
 }
 
 func emailBillSettingsResponse(config *settings.EmailBillConfig) *models.EmailBillSettingsResponse {
+	mode := config.FolderMode
+	if mode == "" {
+		mode = "all"
+	}
 	return &models.EmailBillSettingsResponse{
+		FolderMode: mode, Folders: append([]string{}, config.Folders...),
 		Enabled:               config.Enabled,
 		IMAPServer:            config.IMAPServer,
 		IMAPPort:              config.IMAPPort,

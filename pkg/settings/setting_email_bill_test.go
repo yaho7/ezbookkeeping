@@ -29,6 +29,8 @@ func TestSaveEmailBillConfigurationPreservesOtherSections(t *testing.T) {
 		CronExpression:     "30 8 * * 1-5",
 		MaxEmails:          60,
 		MaxMessageBytes:    2 * 1024 * 1024,
+		FolderMode:         "selected",
+		Folders:            []string{"其他文件夹/账单", "Archive,2026"},
 	}
 
 	require.NoError(t, SaveEmailBillConfiguration(configPath, emailConfig))
@@ -42,6 +44,10 @@ func TestSaveEmailBillConfigurationPreservesOtherSections(t *testing.T) {
 	assert.Equal(t, "30 8 * * 1-5", configFile.Section("email_bill").Key("cron_expression").String())
 	assert.False(t, configFile.Section("email_bill").HasKey("require_authentication_results"))
 	assert.False(t, configFile.Section("email_bill").HasKey("trusted_authserv_domains"))
+	loaded := &Config{}
+	require.NoError(t, loadEmailBillConfiguration(loaded, configFile, "email_bill"))
+	assert.Equal(t, "selected", loaded.EmailBillConfig.FolderMode)
+	assert.Equal(t, emailConfig.Folders, loaded.EmailBillConfig.Folders)
 
 	fileInfo, err := os.Stat(configPath)
 	require.NoError(t, err)
@@ -58,6 +64,17 @@ func TestLoadEmailBillConfigurationDisabledByDefault(t *testing.T) {
 	assert.False(t, config.EmailBillConfig.Enabled)
 	assert.False(t, config.EmailBillConfig.RetainRawEmails)
 	assert.Equal(t, uint32(30), config.EmailBillConfig.RawEmailRetentionDays)
+	assert.Equal(t, "all", config.EmailBillConfig.FolderMode)
+}
+
+func TestSelectedEmailFoldersRequireExplicitNonemptySelection(t *testing.T) {
+	config := &EmailBillConfig{FolderMode: "selected"}
+	require.Error(t, NormalizeEmailBillConfiguration(config))
+	config.Folders = []string{"其他文件夹/账单"}
+	require.NoError(t, NormalizeEmailBillConfiguration(config))
+	cloned := cloneEmailBillConfig(config)
+	config.Folders[0] = "INBOX"
+	require.Equal(t, []string{"其他文件夹/账单"}, cloned.Folders)
 }
 
 func TestLoadEmailBillConfigurationInfersIMAPServer(t *testing.T) {
