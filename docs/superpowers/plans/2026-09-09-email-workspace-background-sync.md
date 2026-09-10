@@ -31,3 +31,12 @@
 - Inspect final diffs for owner scoping, credentials/raw HTML exposure, worker/context cleanup, finite polling and schema compatibility.
 - Update `docs/email-bill-importer.md` with background task semantics, scan visibility, folder handling, restart behavior and raw-body retention.
 - Record completed validation and commit state. Deployment/build remains outside the user's static-only verification authorization.
+
+## Implementation outcome — 2026-09-10
+
+- SSH verified the deployed scan returned successfully after 747,961 ms; another run request took 996,554 ms including waiting. Settings updates were blocked by the synchronous cron lock. Live inbound, candidate and audit tables still contained zero rows.
+- A read-only IMAP fetch of the custom bill folder exposed QQ authentication folding inside bank domain/mailbox properties. Added normalization confined to one authentication property, preserving trusted authserv/domain checks, with positive and negative regression cases.
+- Implemented persistent background tasks, owner-scoped scan metadata, all-folder progress, immediate batch processing, restart interruption recovery, and bounded status/list/detail APIs. Scheduled and manual starts share the coordinator. Added a streaming regression case covering later scan failure and avoiding double processing.
+- Implemented responsive folder/list/detail workspace, one recurring refresh timer, request-generation guards for interactive filtering, retained text and parser/candidate evidence, test-bench/review links, and English/Simplified Chinese/Traditional Chinese strings. Small screens use stacked panes and a bounded scrollable folder list.
+- Static verification: targeted ESLint, full `vue-tsc --noEmit`, Go parsing/formatting through `gofmt`, locale JSON/key checks and Git whitespace checks. No Go tests, compiled builds, rendered browser QA or Docker builds were run under the user's static-only policy. Worker concurrency/restart behavior has source review but no executed runtime tests.
+- Deployment remains pending explicit permission to trigger the existing GitHub Actions image build. The live container was left running its existing image; source commits alone do not change production behavior.
