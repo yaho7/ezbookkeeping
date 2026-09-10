@@ -38,6 +38,11 @@ type EmailBillSyncService struct {
 	ServiceUsingUuid
 	mu     sync.Mutex
 	active map[int64]int64
+	// SQLite uses shared-cache connections: a list reader can otherwise make a
+	// concurrent scan write fail with SQLITE_LOCKED instead of waiting. Guard
+	// all task/index access, including readers, for the SQL operation only.
+	// Lock order is mu then metadataMu; never acquire mu while holding metadataMu.
+	metadataMu sync.Mutex
 }
 
 var EmailBillSync = &EmailBillSyncService{
@@ -72,6 +77,8 @@ func (s *EmailBillSyncService) Start(c core.Context, uid int64, config *settings
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	s.metadataMu.Lock()
+	defer s.metadataMu.Unlock()
 	if id := s.active[uid]; id != 0 {
 		task := &models.EmailBillSyncTask{}
 		has, err := s.UserDataDB(uid).NewSession(c).Where("uid=? AND task_id=?", uid, id).Get(task)
@@ -99,6 +106,7 @@ func (s *EmailBillSyncService) Start(c core.Context, uid int64, config *settings
 	return syncInfo(task), nil
 }
 
+// interruptOrphans requires both mu and metadataMu to be held by the caller.
 func (s *EmailBillSyncService) interruptOrphans(c core.Context, uid int64) error {
 	_, err := s.UserDataDB(uid).NewSession(c).Where("uid=?", uid).In("status", "queued", "running").
 		Cols("status", "stage", "error_message", "updated_unix_time", "completed_unix_time").Update(&models.EmailBillSyncTask{
@@ -118,6 +126,8 @@ func (s *EmailBillSyncService) interruptOrphans(c core.Context, uid int64) error
 func (s *EmailBillSyncService) Latest(c core.Context, uid int64) (*EmailBillSyncInfo, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	s.metadataMu.Lock()
+	defer s.metadataMu.Unlock()
 	if s.active[uid] == 0 {
 		if err := s.interruptOrphans(c, uid); err != nil {
 			return nil, err
@@ -137,7 +147,19 @@ func (s *EmailBillSyncService) save(c core.Context, task *models.EmailBillSyncTa
 		return err
 	}
 	task.FoldersJson, task.UpdatedUnixTime = string(data), time.Now().Unix()
+	s.metadataMu.Lock()
+	defer s.metadataMu.Unlock()
 	_, err = s.UserDataDB(task.Uid).NewSession(c).ID(task.TaskId).AllCols().Update(task)
+	return err
+}
+
+func (s *EmailBillSyncService) finishPendingMessages(c core.Context, uid, taskID int64) error {
+	s.metadataMu.Lock()
+	defer s.metadataMu.Unlock()
+	_, err := s.UserDataDB(uid).NewSession(c).Where("uid=? AND task_id=?", uid, taskID).
+		In("status", "ready", "downloaded", "processing").Cols("status", "reason", "updated_unix_time").Update(&models.EmailBillScanMessage{
+		Status: "not_processed", Reason: "Task ended before this message was processed; check the task outcome and run again", UpdatedUnixTime: time.Now().Unix(),
+	})
 	return err
 }
 
@@ -169,10 +191,7 @@ func (s *EmailBillSyncService) run(task *models.EmailBillSyncTask, config *setti
 		}
 		// Persist terminal state even after the worker deadline has expired.
 		finish := core.NewCronJobContext("EmailBillBackgroundFinish", 0)
-		if _, err := s.UserDataDB(task.Uid).NewSession(finish).Where("uid=? AND task_id=?", task.Uid, task.TaskId).
-			In("status", "ready", "downloaded", "processing").Cols("status", "reason", "updated_unix_time").Update(&models.EmailBillScanMessage{
-			Status: "not_processed", Reason: "Task ended before this message was processed; check the task outcome and run again", UpdatedUnixTime: time.Now().Unix(),
-		}); err != nil && runErr == nil {
+		if err := s.finishPendingMessages(finish, task.Uid, task.TaskId); err != nil && runErr == nil {
 			task.Status, task.ErrorMessage = "failed", sanitizeEmailTaskError(err.Error(), config)
 		}
 		if err := s.save(finish, task, folders); err != nil {
@@ -259,6 +278,8 @@ func (s *EmailBillSyncService) record(c core.Context, task *models.EmailBillSync
 	digest := sha256.Sum256([]byte(fmt.Sprintf("%s\x00%s\x00%s\x00%d\x00%d", config.IMAPServer, config.MailUser, event.Folder, message.UIDValidity, message.UID)))
 	key := fmt.Sprintf("%x", digest)
 	entry := &models.EmailBillScanMessage{}
+	s.metadataMu.Lock()
+	defer s.metadataMu.Unlock()
 	db := s.UserDataDB(task.Uid)
 	has, err := db.NewSession(c).Where("uid=? AND remote_key=?", task.Uid, key).Get(entry)
 	if err != nil {

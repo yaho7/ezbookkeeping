@@ -21,6 +21,8 @@ type EmailBillMailboxPage struct {
 }
 
 func (s *EmailBillSyncService) ListMessages(c core.Context, uid int64, folder, status, search string, page int) (*EmailBillMailboxPage, error) {
+	s.metadataMu.Lock()
+	defer s.metadataMu.Unlock()
 	if page < 1 || page > 1000000 {
 		page = 1
 	}
@@ -60,6 +62,8 @@ func (s *EmailBillSyncService) ListMessages(c core.Context, uid int64, folder, s
 
 // MessageDetail verifies the scan row and inbound ownership before reading evidence.
 func (s *EmailBillSyncService) MessageDetail(c core.Context, uid, id int64) (map[string]any, error) {
+	s.metadataMu.Lock()
+	defer s.metadataMu.Unlock()
 	db := s.UserDataDB(uid)
 	entry := &models.EmailBillScanMessage{}
 	has, err := db.NewSession(c).Where("uid=? AND entry_id=?", uid, id).Get(entry)
