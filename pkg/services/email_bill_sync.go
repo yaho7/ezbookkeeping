@@ -105,6 +105,13 @@ func (s *EmailBillSyncService) interruptOrphans(c core.Context, uid int64) error
 		Status: "interrupted", Stage: "finished", ErrorMessage: "Server restarted before the task completed",
 		UpdatedUnixTime: time.Now().Unix(), CompletedUnixTime: time.Now().Unix(),
 	})
+	if err != nil {
+		return err
+	}
+	_, err = s.UserDataDB(uid).NewSession(c).Where("uid=?", uid).In("status", "ready", "downloaded", "processing").
+		Cols("status", "reason", "updated_unix_time").Update(&models.EmailBillScanMessage{
+		Status: "not_processed", Reason: "Server restarted before the task completed", UpdatedUnixTime: time.Now().Unix(),
+	})
 	return err
 }
 
@@ -218,7 +225,7 @@ func (s *EmailBillSyncService) run(task *models.EmailBillSyncTask, config *setti
 				return err
 			}
 		}
-		if event.Kind == "folder" || time.Since(lastSave) >= time.Second {
+		if event.Kind == "folder" || event.Status == "processing" || time.Since(lastSave) >= time.Second {
 			lastSave = time.Now()
 			return s.save(c, task, folders)
 		}
