@@ -251,7 +251,7 @@ async function loadPage(): Promise<void> {
         const [accountResponse, categoryResponse] = await Promise.all([services.getAllAccounts({ visibleOnly: true }), services.getAllTransactionCategories(), store.loadAll()]);
         accounts.value = resultOf(accountResponse);
         categories.value = Object.values(resultOf(categoryResponse)).flat();
-        if (store.settings) Object.assign(settings, store.settings);
+        if (store.settings) Object.assign(settings, { ...store.settings, folders: [...(store.settings.folders || [])] });
         readSchedule(settings.cronExpression);
     } catch (error) { showError(error); } finally { loading.value = false; }
 }
@@ -263,7 +263,7 @@ async function saveSettings(): Promise<void> {
         settings.cronExpression = buildSchedule();
         await store.saveSettings({ ...settings, mailPassword: mailPassword.value || undefined });
         mailPassword.value = '';
-        if (store.settings) Object.assign(settings, store.settings);
+        if (store.settings) Object.assign(settings, { ...store.settings, folders: [...(store.settings.folders || [])] });
         snackbar.value?.showMessage('Data has been updated');
     } catch (error) { showError(error); } finally { saving.value = false; }
 }
