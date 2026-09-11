@@ -3021,5 +3021,21 @@
     "Saved scope applies to manual and scheduled runs. The current task keeps its original scope.": "Saved scope applies to manual and scheduled runs. The current task keeps its original scope.",
     "Save the folder selection before running a new scan.": "Save the folder selection before running a new scan.",
     "The full body was not retained or has expired. Only matching emails are downloaded; enable body retention in Mailbox & Schedule for future scans.": "The full body was not retained or has expired. Only matching emails are downloaded; enable body retention in Mailbox & Schedule for future scans.",
-    "Parser matching failed after downloading": "Parser matching failed after downloading"
+    "Parser matching failed after downloading": "Parser matching failed after downloading",
+    "Choose where to record bills. Bank and card filters are optional; leave them unrestricted to use this as a default account.": "Choose where to record bills. Bank and card filters are optional; leave them unrestricted to use this as a default account.",
+    "Create a bookkeeping account first, then return here to select it.": "Create a bookkeeping account first, then return here to select it.",
+    "Banks come from your installed email parsers.": "Banks come from your installed email parsers.",
+    "Only bills in the target account currency can be imported.": "Only bills in the target account currency can be imported.",
+    "Last Four Digits (optional)": "Last Four Digits (optional)",
+    "Leave blank for all cards. Enter four digits only when you need to distinguish cards.": "Leave blank for all cards. Enter four digits only when you need to distinguish cards.",
+    "Matching bills will be recorded in": "Matching bills will be recorded in",
+    "Advanced Rule Options": "Advanced Rule Options",
+    "Keep 0 unless rules overlap. Higher priority rules are checked first.": "Keep 0 unless rules overlap. Higher priority rules are checked first.",
+    "Any Bank": "Any Bank",
+    "Any Card Type": "Any Card Type",
+    "Any Currency": "Any Currency",
+    "Enter exactly four digits or leave blank.": "Enter exactly four digits or leave blank.",
+    "Priority must be a whole number between -2147483648 and 2147483647.": "Priority must be a whole number between -2147483648 and 2147483647.",
+    "China Merchants Bank": "China Merchants Bank",
+    "Debit Card": "Debit Card"
 }

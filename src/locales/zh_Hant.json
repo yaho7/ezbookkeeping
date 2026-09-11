@@ -2925,5 +2925,21 @@
     "Saved scope applies to manual and scheduled runs. The current task keeps its original scope.": "儲存後對手動與排程工作生效，目前執行中的工作仍使用原範圍。",
     "Save the folder selection before running a new scan.": "資料夾選擇尚未儲存，請儲存後再執行掃描。",
     "The full body was not retained or has expired. Only matching emails are downloaded; enable body retention in Mailbox & Schedule for future scans.": "內文未儲存或已過期。系統只下載符合規則的郵件；可在「信箱與排程」中開啟內文保留，用於後續掃描。",
-    "Parser matching failed after downloading": "下載內文後，解析規則未符合"
+    "Parser matching failed after downloading": "下載內文後，解析規則未符合",
+    "Choose where to record bills. Bank and card filters are optional; leave them unrestricted to use this as a default account.": "選擇帳單記入哪個帳戶。銀行和卡種條件均可選；選擇不限即可作為預設記帳帳戶。",
+    "Create a bookkeeping account first, then return here to select it.": "請先建立記帳帳戶，再回到這裡選擇。",
+    "Banks come from your installed email parsers.": "銀行選項來自已安裝的郵件解析範本。",
+    "Only bills in the target account currency can be imported.": "只能匯入與目標帳戶幣別一致的帳單。",
+    "Last Four Digits (optional)": "卡號後四位（選填）",
+    "Leave blank for all cards. Enter four digits only when you need to distinguish cards.": "留空表示所有卡片；僅在需要區分多張卡時填寫四位數字。",
+    "Matching bills will be recorded in": "符合條件的帳單將記入",
+    "Advanced Rule Options": "進階規則選項",
+    "Keep 0 unless rules overlap. Higher priority rules are checked first.": "通常保持 0 即可；多條規則重疊時，優先使用數值較大的規則。",
+    "Any Bank": "不限銀行",
+    "Any Card Type": "不限卡種",
+    "Any Currency": "不限幣別",
+    "Enter exactly four digits or leave blank.": "請輸入四位數字，或留空。",
+    "Priority must be a whole number between -2147483648 and 2147483647.": "優先順序必須是 -2147483648 至 2147483647 之間的整數。",
+    "China Merchants Bank": "招商銀行",
+    "Debit Card": "儲蓄卡"
 }
