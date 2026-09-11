@@ -1,3 +1,4 @@
+import { emailBillRuleSavePayload } from '@/core/emailBill.ts';
 import axios, { type AxiosRequestConfig, type AxiosRequestHeaders, type AxiosResponse } from 'axios';
 
 import type { ApiResponse } from '@/core/api.ts';
@@ -497,7 +498,7 @@ export default {
         return axios.get<ApiResponse<EmailBillParserRule[]>>('v1/email_bill/parsers/list.json');
     },
     saveEmailBillParser: (req: Partial<EmailBillParserRule>): ApiResponsePromise<EmailBillParserRule> => {
-        return axios.post<ApiResponse<EmailBillParserRule>>('v1/email_bill/parsers/save.json', req);
+        return axios.post<ApiResponse<EmailBillParserRule>>('v1/email_bill/parsers/save.json', emailBillRuleSavePayload(req));
     },
     disableEmailBillParser: (id: string): ApiResponsePromise<boolean> => {
         return axios.post<ApiResponse<boolean>>('v1/email_bill/parsers/disable.json', { id });
@@ -515,7 +516,7 @@ export default {
         return axios.get<ApiResponse<EmailBillRoutingRule[]>>('v1/email_bill/routes/list.json');
     },
     saveEmailBillRoute: (req: Partial<EmailBillRoutingRule>): ApiResponsePromise<EmailBillRoutingRule> => {
-        return axios.post<ApiResponse<EmailBillRoutingRule>>('v1/email_bill/routes/save.json', req);
+        return axios.post<ApiResponse<EmailBillRoutingRule>>('v1/email_bill/routes/save.json', emailBillRuleSavePayload(req));
     },
     disableEmailBillRoute: (id: string): ApiResponsePromise<boolean> => {
         return axios.post<ApiResponse<boolean>>('v1/email_bill/routes/disable.json', { id });
@@ -524,7 +525,7 @@ export default {
         return axios.get<ApiResponse<EmailBillClassificationRule[]>>('v1/email_bill/classification/list.json');
     },
     saveEmailBillClassification: (req: Partial<EmailBillClassificationRule>): ApiResponsePromise<EmailBillClassificationRule> => {
-        return axios.post<ApiResponse<EmailBillClassificationRule>>('v1/email_bill/classification/save.json', req);
+        return axios.post<ApiResponse<EmailBillClassificationRule>>('v1/email_bill/classification/save.json', emailBillRuleSavePayload(req));
     },
     disableEmailBillClassification: (id: string): ApiResponsePromise<boolean> => {
         return axios.post<ApiResponse<boolean>>('v1/email_bill/classification/disable.json', { id });

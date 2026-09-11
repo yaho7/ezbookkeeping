@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { buildEmailBillSchedule, createEmailBillParserRule, normalizeEmailBillCandidate, parseEmailBillSchedule } from '@/core/emailBill.ts';
+import { emailBillRuleSavePayload, buildEmailBillSchedule, createEmailBillParserRule, normalizeEmailBillCandidate, parseEmailBillSchedule } from '@/core/emailBill.ts';
 
 describe('email bill settings models', () => {
     it('creates an enabled bounded parser draft', () => {
@@ -27,5 +27,19 @@ describe('email bill settings models', () => {
     it('preserves advanced cron expressions', () => {
         expect(parseEmailBillSchedule('0 9 1 * *').mode).toBe('advanced');
         expect(buildEmailBillSchedule('advanced', '08:00', '1', '0 9 1 * *')).toBe('0 9 1 * *');
+    });
+});
+
+describe('email bill rule request IDs', () => {
+    it('encodes a new rule as zero without changing its draft', () => {
+        const draft = { id: '', targetAccountId: '3841959312247226368' };
+        expect(JSON.parse(JSON.stringify(emailBillRuleSavePayload(draft)))).toEqual({ id: '0', targetAccountId: draft.targetAccountId });
+        expect(draft.id).toBe('');
+        expect(emailBillRuleSavePayload({})).toEqual({ id: '0' });
+    });
+
+    it('preserves existing IDs beyond JavaScript integer precision', () => {
+        const draft = { id: '3841959312247226368' };
+        expect(emailBillRuleSavePayload(draft).id).toBe(draft.id);
     });
 });

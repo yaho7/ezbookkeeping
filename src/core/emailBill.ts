@@ -228,3 +228,8 @@ export function buildEmailBillSchedule(mode: EmailBillScheduleMode, time: string
     const minute = parts[1] || '0';
     return `${Number(minute)} ${Number(hour)} * * ${mode === 'weekly' ? weekday : '*'}`;
 }
+
+// Draft IDs are empty in the UI; Go's json:",string" requires a numeric string.
+export function emailBillRuleSavePayload<T extends { id?: string }>(draft: T): T & { id: string } {
+    return { ...draft, id: draft.id || '0' };
+}
