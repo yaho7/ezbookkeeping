@@ -3,7 +3,7 @@
         <v-col cols="12">
             <v-card>
                 <v-card-title class="d-flex align-center flex-wrap ga-3">
-                    <span>{{ tt('AI Settings') }}</span>
+                    <span>{{ tt('AI Text Settings') }}</span>
                     <v-chip :color="settings.provider ? 'success' : undefined" size="small" variant="tonal">
                         {{ settings.provider ? tt('Enabled') : tt('Disabled') }}
                     </v-chip>
@@ -12,7 +12,10 @@
                     {{ tt('Configure the global language model used by AI features. Email bill automation uses this configuration when rules need AI.') }}
                 </v-card-subtitle>
                 <v-divider />
-                <v-form @submit.prevent="save">
+                <v-alert v-if="!settings.canManage || settings.managedExternally" class="ma-6" type="info" variant="tonal">
+                    {{ tt(settings.managedExternally ? 'AI settings are managed by deployment environment variables.' : 'Global AI settings can only be changed by the configured settings operator.') }}
+                </v-alert>
+                <v-form :disabled="!editable || saving || testing || loading" @submit.prevent="save">
                     <v-card-text>
                         <v-alert class="mb-5" type="info" variant="tonal">
                             {{ tt('The API key is never returned to the browser. Leave it blank to keep the saved key.') }}
@@ -50,6 +53,9 @@
                                     :placeholder="settings.apiKeyConfigured ? tt('Saved; leave blank to keep') : ''"
                                     v-model="settings.apiKey"
                                 />
+                            </v-col>
+                            <v-col v-if="showsAPIKey && settings.apiKeyConfigured" cols="12">
+                                <v-checkbox v-model="settings.clearApiKey" :label="tt('Delete saved API key (disable this provider if a key is required)')" />
                             </v-col>
                             <v-col cols="12" md="6">
                                 <v-select
@@ -90,10 +96,10 @@
                         </v-row>
                     </v-card-text>
                     <v-card-actions class="px-6 pb-5">
-                        <v-btn variant="text" :loading="loading" @click="load">{{ tt('Refresh') }}</v-btn>
+                        <v-btn variant="text" :disabled="saving || testing" :loading="loading" @click="load">{{ tt('Refresh') }}</v-btn>
                         <v-spacer />
-                        <v-btn variant="tonal" :disabled="!settings.provider" :loading="testing" @click="testSettings">{{ tt('Test Connection') }}</v-btn>
-                        <v-btn color="primary" type="submit" :loading="saving">{{ tt('Save') }}</v-btn>
+                        <v-btn variant="tonal" :disabled="!editable || !settings.provider || saving || loading" :loading="testing" @click="testSettings">{{ tt('Test Connection') }}</v-btn>
+                        <v-btn color="primary" :disabled="!editable || testing || loading" type="submit" :loading="saving">{{ tt('Save') }}</v-btn>
                     </v-card-actions>
                 </v-form>
             </v-card>
@@ -141,6 +147,7 @@ const thinkingLevels = computed(() => [
     { title: tt('High'), value: 'high' },
     { title: tt('Extra High'), value: 'xhigh' }
 ]);
+const editable = computed(() => settings.canManage && !settings.managedExternally);
 const requiresEndpoint = computed(() => ['openai_compatible', 'openai_responses_compatible', 'anthropic_compatible', 'ollama', 'lm_studio'].includes(settings.provider));
 const showsAPIKey = computed(() => settings.provider !== '' && settings.provider !== 'ollama');
 const endpointPlaceholder = computed(() => settings.provider === 'ollama' ? 'http://ollama:11434' : settings.provider === 'lm_studio' ? 'http://127.0.0.1:1234' : 'https://api.example.com/v1');
@@ -151,7 +158,7 @@ async function load(): Promise<void> {
     loading.value = true;
     try {
         const response = await services.getLLMSettings();
-        Object.assign(settings, resultOf(response), { apiKey: '' });
+        Object.assign(settings, resultOf(response), { apiKey: '', clearApiKey: false });
     } catch (error) {
         showError(error);
     } finally {
@@ -160,10 +167,11 @@ async function load(): Promise<void> {
 }
 
 async function save(): Promise<void> {
+    if (!editable.value || saving.value || testing.value || loading.value) return;
     saving.value = true;
     try {
         const response = await services.updateLLMSettings({ ...settings });
-        Object.assign(settings, resultOf(response), { apiKey: '' });
+        Object.assign(settings, resultOf(response), { apiKey: '', clearApiKey: false });
         snackbar.value?.showMessage('Data has been updated');
     } catch (error) {
         showError(error);
@@ -173,6 +181,7 @@ async function save(): Promise<void> {
 }
 
 async function testSettings(): Promise<void> {
+    if (!editable.value || saving.value || testing.value || loading.value) return;
     testing.value = true;
     try {
         resultOf(await services.testLLMSettings({ ...settings }));

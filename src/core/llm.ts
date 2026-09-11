@@ -1,4 +1,7 @@
 export interface LLMSettings {
+    canManage: boolean;
+    managedExternally: boolean;
+    clearApiKey?: boolean;
     provider: string;
     endpoint: string;
     modelId: string;
@@ -12,6 +15,9 @@ export interface LLMSettings {
 
 export function createLLMSettings(): LLMSettings {
     return {
+        canManage: false,
+        managedExternally: false,
+        clearApiKey: false,
         provider: '',
         endpoint: '',
         modelId: '',

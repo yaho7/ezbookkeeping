@@ -39,7 +39,7 @@ func (a *EmailBillSettingsApi) GetHandler(c *core.WebContext) (any, *errs.Error)
 	if config == nil || config.EmailBillConfig == nil {
 		return emailBillSettingsResponse(&settings.EmailBillConfig{}), nil
 	}
-	if config.EmailBillConfig.TargetUser != "" && config.EmailBillConfig.TargetUser != user.Username {
+	if !canManageEmailSettings(config, user.Username) {
 		return nil, errs.ErrNotPermittedToPerformThisAction
 	}
 	return emailBillSettingsResponse(config.EmailBillConfig), nil
@@ -47,6 +47,8 @@ func (a *EmailBillSettingsApi) GetHandler(c *core.WebContext) (any, *errs.Error)
 
 // UpdateHandler validates, persists and immediately applies email bill settings.
 func (a *EmailBillSettingsApi) UpdateHandler(c *core.WebContext) (any, *errs.Error) {
+	settingsUpdateMutex.Lock()
+	defer settingsUpdateMutex.Unlock()
 	request := &models.EmailBillSettingsUpdateRequest{}
 	if err := c.ShouldBindJSON(request); err != nil {
 		return false, errs.NewIncompleteOrIncorrectSubmissionError(err)
@@ -62,7 +64,7 @@ func (a *EmailBillSettingsApi) UpdateHandler(c *core.WebContext) (any, *errs.Err
 		return false, errs.ErrOperationFailed
 	}
 	currentEmailConfig := currentConfig.EmailBillConfig
-	if currentEmailConfig != nil && currentEmailConfig.TargetUser != "" && currentEmailConfig.TargetUser != user.Username {
+	if !canManageEmailSettings(currentConfig, user.Username) || settings.ConfigurationSectionManagedExternally("email_bill") {
 		return false, errs.ErrNotPermittedToPerformThisAction
 	}
 
@@ -127,7 +129,7 @@ func (a *EmailBillSettingsApi) TestHandler(c *core.WebContext) (any, *errs.Error
 	if currentConfig == nil {
 		return false, errs.ErrOperationFailed
 	}
-	if currentConfig.EmailBillConfig != nil && currentConfig.EmailBillConfig.TargetUser != "" && currentConfig.EmailBillConfig.TargetUser != user.Username {
+	if !canManageEmailSettings(currentConfig, user.Username) {
 		return false, errs.ErrNotPermittedToPerformThisAction
 	}
 	emailConfig, err := buildEmailBillConfig(user.Username, request, currentConfig.EmailBillConfig)
@@ -155,7 +157,7 @@ func (a *EmailBillSettingsApi) FoldersHandler(c *core.WebContext) (any, *errs.Er
 	if config == nil {
 		return nil, errs.ErrOperationFailed
 	}
-	if config.EmailBillConfig != nil && config.EmailBillConfig.TargetUser != "" && config.EmailBillConfig.TargetUser != user.Username {
+	if !canManageEmailSettings(config, user.Username) {
 		return nil, errs.ErrNotPermittedToPerformThisAction
 	}
 	request.FolderMode, request.Folders = "all", nil
@@ -174,7 +176,7 @@ func buildEmailBillConfig(username string, request *models.EmailBillSettingsUpda
 	password := strings.TrimSpace(request.MailPassword)
 	maxMessageBytes := uint32(2 * 1024 * 1024)
 	if current != nil {
-		if password == "" {
+		if password == "" && strings.EqualFold(strings.TrimSpace(request.IMAPServer), current.IMAPServer) && request.IMAPPort == current.IMAPPort && strings.TrimSpace(request.MailUser) == current.MailUser {
 			password = current.MailPassword
 		}
 		if current.MaxMessageBytes > 0 {

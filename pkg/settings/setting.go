@@ -419,6 +419,7 @@ type Config struct {
 	EnableCreateScheduledTransaction bool
 
 	// Secret
+	SettingsManagementUser                string
 	SecretKeyNoSet                        bool
 	SecretKey                             string
 	TrustedProxyIPs                       []*net.IPNet
@@ -1239,6 +1240,7 @@ func defaultIMAPServer(domain string) string {
 }
 
 func loadSecurityConfiguration(config *Config, configFile *ini.File, sectionName string) error {
+	config.SettingsManagementUser = strings.TrimSpace(getConfigItemStringValue(configFile, sectionName, "settings_management_user", ""))
 	var err error
 
 	config.SecretKeyNoSet = !getConfigItemIsSet(configFile, sectionName, "secret_key")

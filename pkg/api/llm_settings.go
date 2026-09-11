@@ -28,16 +28,24 @@ type LLMSettingsApi struct {
 var LLMSettings = &LLMSettingsApi{container: settings.Container}
 
 // GetHandler returns the global text LLM configuration without its credential.
-func (a *LLMSettingsApi) GetHandler(_ *core.WebContext) (any, *errs.Error) {
+func (a *LLMSettingsApi) GetHandler(c *core.WebContext) (any, *errs.Error) {
 	config := a.container.GetCurrentConfig()
 	if config == nil {
 		return nil, errs.ErrOperationFailed
 	}
-	return textRecognitionLLMSettingsResponse(config.TextRecognitionLLMConfig), nil
+	response := textRecognitionLLMSettingsResponse(config.TextRecognitionLLMConfig)
+	response.CanManage = canManageGlobalSettings(c, config)
+	response.ManagedExternally = settings.ConfigurationSectionManagedExternally("llm_text_recognition")
+	if !response.CanManage {
+		response.Endpoint, response.Proxy = "", ""
+	}
+	return response, nil
 }
 
 // UpdateHandler persists and immediately applies the global text LLM configuration.
 func (a *LLMSettingsApi) UpdateHandler(c *core.WebContext) (any, *errs.Error) {
+	settingsUpdateMutex.Lock()
+	defer settingsUpdateMutex.Unlock()
 	request := &models.LLMSettingsUpdateRequest{}
 	if err := c.ShouldBindJSON(request); err != nil {
 		return false, errs.NewIncompleteOrIncorrectSubmissionError(err)
@@ -46,9 +54,15 @@ func (a *LLMSettingsApi) UpdateHandler(c *core.WebContext) (any, *errs.Error) {
 	if currentConfig == nil {
 		return false, errs.ErrOperationFailed
 	}
+	if !canManageGlobalSettings(c, currentConfig) || settings.ConfigurationSectionManagedExternally("llm_text_recognition") {
+		return false, errs.ErrNotPermittedToPerformThisAction
+	}
 	llmConfig, err := buildTextRecognitionLLMConfig(request, currentConfig.TextRecognitionLLMConfig)
 	if err != nil {
 		return false, errs.NewIncompleteOrIncorrectSubmissionError(err)
+	}
+	if _, err = llm.NewLargeLanguageModelProvider(llmConfig, currentConfig.EnableDebugLog); err != nil {
+		return false, errs.Or(err, errs.ErrOperationFailed)
 	}
 	if err = settings.SaveTextRecognitionLLMConfiguration(currentConfig.ConfigFilePath, llmConfig); err != nil {
 		log.Errorf(c, "[llm_settings.UpdateHandler] failed to persist settings, because %s", err.Error())
@@ -57,11 +71,7 @@ func (a *LLMSettingsApi) UpdateHandler(c *core.WebContext) (any, *errs.Error) {
 	if err = a.container.UpdateTextRecognitionLLMConfig(llmConfig); err != nil {
 		return false, errs.ErrOperationFailed
 	}
-	if err = llm.InitializeLargeLanguageModelProvider(a.container.GetCurrentConfig()); err != nil {
-		log.Errorf(c, "[llm_settings.UpdateHandler] failed to initialize provider, because %s", err.Error())
-		return false, errs.Or(err, errs.ErrOperationFailed)
-	}
-	return textRecognitionLLMSettingsResponse(llmConfig), nil
+	return a.GetHandler(c)
 }
 
 // TestHandler tests the submitted settings without saving or replacing the active provider.
@@ -73,6 +83,9 @@ func (a *LLMSettingsApi) TestHandler(c *core.WebContext) (any, *errs.Error) {
 	currentConfig := a.container.GetCurrentConfig()
 	if currentConfig == nil {
 		return false, errs.ErrOperationFailed
+	}
+	if !canManageGlobalSettings(c, currentConfig) || settings.ConfigurationSectionManagedExternally("llm_text_recognition") {
+		return false, errs.ErrNotPermittedToPerformThisAction
 	}
 	llmConfig, err := buildTextRecognitionLLMConfig(request, currentConfig.TextRecognitionLLMConfig)
 	if err != nil || llmConfig.LLMProvider == "" {
@@ -126,6 +139,15 @@ func buildTextRecognitionLLMConfig(request *models.LLMSettingsUpdateRequest, cur
 	modelID := strings.TrimSpace(request.ModelID)
 	endpoint := strings.TrimRight(strings.TrimSpace(request.Endpoint), "/")
 	apiKey := strings.TrimSpace(request.APIKey)
+	if request.ClearAPIKey && apiKey != "" {
+		return nil, fmt.Errorf("cannot replace and delete the API key together")
+	}
+	if current != nil {
+		saved := textRecognitionLLMSettingsResponse(current)
+		if request.ClearAPIKey || provider != saved.Provider || endpoint != strings.TrimRight(saved.Endpoint, "/") {
+			clearLLMCredentials(config)
+		}
+	}
 	thinking := settings.LLMThinkingLevel(strings.TrimSpace(request.Thinking))
 	if !validLLMProvider(provider) {
 		return nil, fmt.Errorf("unsupported LLM provider %q", provider)
@@ -306,4 +328,10 @@ func ensureAnthropicDefaults(config *settings.LLMConfig) {
 	if config.AnthropicCompatibleAPIVersion == "" {
 		config.AnthropicCompatibleAPIVersion = "2023-06-01"
 	}
+}
+
+func clearLLMCredentials(config *settings.LLMConfig) {
+	config.OpenAIAPIKey, config.OpenAICompatibleAPIKey, config.AnthropicAPIKey = "", "", ""
+	config.AnthropicCompatibleAPIKey, config.OpenRouterAPIKey = "", ""
+	config.LMStudioToken, config.GoogleAIAPIKey = "", ""
 }

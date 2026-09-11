@@ -14,10 +14,7 @@ import (
 )
 
 // LargeLanguageModelProviderContainer contains the current large language model provider
-type LargeLanguageModelProviderContainer struct {
-	textRecognitionCurrentProvider         provider.LargeLanguageModelProvider
-	receiptImageRecognitionCurrentProvider provider.LargeLanguageModelProvider
-}
+type LargeLanguageModelProviderContainer struct{}
 
 // Initialize a large language model provider container singleton instance
 var (
@@ -26,24 +23,13 @@ var (
 
 // InitializeLargeLanguageModelProvider initializes the current large language model provider according to the config
 func InitializeLargeLanguageModelProvider(config *settings.Config) error {
-	var err error = nil
-
-	if config.TextRecognitionLLMConfig != nil {
-		Container.textRecognitionCurrentProvider, err = initializeLargeLanguageModelProvider(config.TextRecognitionLLMConfig, config.EnableDebugLog)
-
-		if err != nil {
-			return err
+	for _, candidate := range []*settings.LLMConfig{config.TextRecognitionLLMConfig, config.ReceiptImageRecognitionLLMConfig} {
+		if candidate != nil {
+			if _, err := initializeLargeLanguageModelProvider(candidate, config.EnableDebugLog); err != nil {
+				return err
+			}
 		}
 	}
-
-	if config.ReceiptImageRecognitionLLMConfig != nil {
-		Container.receiptImageRecognitionCurrentProvider, err = initializeLargeLanguageModelProvider(config.ReceiptImageRecognitionLLMConfig, config.EnableDebugLog)
-
-		if err != nil {
-			return err
-		}
-	}
-
 	return nil
 }
 
@@ -78,20 +64,29 @@ func NewLargeLanguageModelProvider(llmConfig *settings.LLMConfig, enableResponse
 	return initializeLargeLanguageModelProvider(llmConfig, enableResponseLog)
 }
 
-// GetJsonResponseByTextRecognitionModel returns the json response from the current large language model provider by transaction text recognition model
-func (l *LargeLanguageModelProviderContainer) GetJsonResponseByTextRecognitionModel(c core.Context, uid int64, currentConfig *settings.Config, request *data.LargeLanguageModelRequest) (*data.LargeLanguageModelTextualResponse, error) {
-	if currentConfig.TextRecognitionLLMConfig == nil || Container.textRecognitionCurrentProvider == nil {
+// GetJsonResponseByTextRecognitionModel uses one immutable configuration snapshot for both provider and request.
+func (l *LargeLanguageModelProviderContainer) GetJsonResponseByTextRecognitionModel(c core.Context, uid int64, config *settings.Config, request *data.LargeLanguageModelRequest) (*data.LargeLanguageModelTextualResponse, error) {
+	if config == nil {
 		return nil, errs.ErrInvalidLLMProvider
 	}
-
-	return l.textRecognitionCurrentProvider.GetJsonResponse(c, uid, currentConfig.TextRecognitionLLMConfig, request)
+	return getJsonResponse(c, uid, config.TextRecognitionLLMConfig, config.EnableDebugLog, request)
 }
 
-// GetJsonResponseByReceiptImageRecognitionModel returns the json response from the current large language model provider by receipt image recognition model
-func (l *LargeLanguageModelProviderContainer) GetJsonResponseByReceiptImageRecognitionModel(c core.Context, uid int64, currentConfig *settings.Config, request *data.LargeLanguageModelRequest) (*data.LargeLanguageModelTextualResponse, error) {
-	if currentConfig.ReceiptImageRecognitionLLMConfig == nil || Container.receiptImageRecognitionCurrentProvider == nil {
+// GetJsonResponseByReceiptImageRecognitionModel uses the request's receipt configuration.
+func (l *LargeLanguageModelProviderContainer) GetJsonResponseByReceiptImageRecognitionModel(c core.Context, uid int64, config *settings.Config, request *data.LargeLanguageModelRequest) (*data.LargeLanguageModelTextualResponse, error) {
+	if config == nil {
 		return nil, errs.ErrInvalidLLMProvider
 	}
+	return getJsonResponse(c, uid, config.ReceiptImageRecognitionLLMConfig, config.EnableDebugLog, request)
+}
 
-	return l.receiptImageRecognitionCurrentProvider.GetJsonResponse(c, uid, currentConfig.ReceiptImageRecognitionLLMConfig, request)
+func getJsonResponse(c core.Context, uid int64, config *settings.LLMConfig, debug bool, request *data.LargeLanguageModelRequest) (*data.LargeLanguageModelTextualResponse, error) {
+	if config == nil || config.LLMProvider == "" {
+		return nil, errs.ErrInvalidLLMProvider
+	}
+	adapter, err := initializeLargeLanguageModelProvider(config, debug)
+	if err != nil {
+		return nil, err
+	}
+	return adapter.GetJsonResponse(c, uid, config, request)
 }

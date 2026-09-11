@@ -23,8 +23,9 @@ func (p *fakeLLMTestProvider) GetJsonResponse(core.Context, int64, *settings.LLM
 
 func TestBuildTextRecognitionLLMConfigPreservesBlankSecret(t *testing.T) {
 	current := &settings.LLMConfig{
-		LLMProvider:            settings.OpenAICompatibleLLMProvider,
-		OpenAICompatibleAPIKey: "stored-secret",
+		LLMProvider:             settings.OpenAICompatibleLLMProvider,
+		OpenAICompatibleAPIKey:  "stored-secret",
+		OpenAICompatibleBaseURL: "https://llm.example.com/v1",
 	}
 	request := &models.LLMSettingsUpdateRequest{
 		Provider: settings.OpenAICompatibleLLMProvider, Endpoint: "https://llm.example.com/v1",
@@ -80,4 +81,17 @@ func TestTextRecognitionLLMConnectionRejectsUnexpectedResponse(t *testing.T) {
 	err := testTextRecognitionLLM(core.NewNullContext(), 7, &settings.LLMConfig{}, &fakeLLMTestProvider{content: `{"status":"maybe"}`})
 
 	require.ErrorContains(t, err, "unexpected")
+}
+
+func TestLLMSettingsRejectsCredentialReuseAcrossEndpoints(t *testing.T) {
+	_, err := buildTextRecognitionLLMConfig(&models.LLMSettingsUpdateRequest{
+		Provider: settings.OpenAICompatibleLLMProvider, Endpoint: "https://different.example/v1", ModelID: "model",
+	}, &settings.LLMConfig{LLMProvider: settings.OpenAICompatibleLLMProvider, OpenAICompatibleBaseURL: "https://saved.example/v1", OpenAICompatibleAPIKey: "saved"})
+	require.ErrorContains(t, err, "API key is required")
+}
+
+func TestLLMSettingsClearsCredentialWhenDisabled(t *testing.T) {
+	config, err := buildTextRecognitionLLMConfig(&models.LLMSettingsUpdateRequest{ClearAPIKey: true}, &settings.LLMConfig{LLMProvider: settings.OpenAILLMProvider, OpenAIAPIKey: "saved"})
+	require.NoError(t, err)
+	assert.Empty(t, config.OpenAIAPIKey)
 }
