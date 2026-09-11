@@ -3046,5 +3046,9 @@
     "AI generated a draft, but it found no bills. Review the code and test again.": "AI 已生成草稿，但未识别到账单。请检查代码后重新试解析。",
     "AI generated a draft, but its conditions do not match this email. Adjust them and test again.": "AI 已生成草稿，但匹配条件未命中这封邮件。请调整条件后重新试解析。",
     "AI generated a draft, but its code failed validation. Edit the code and test again.": "AI 已生成草稿，但代码未通过校验。请修改代码后重新试解析。",
-    "Parser draft needs correction": "解析规则草稿需要调整"
+    "Parser draft needs correction": "解析规则草稿需要调整",
+    "AI Text Settings": "AI 文本设置",
+    "AI settings are managed by deployment environment variables.": "AI 设置由部署环境变量管理，请在部署配置中修改。",
+    "Global AI settings can only be changed by the configured settings operator.": "仅部署配置中指定的管理用户可以修改全局 AI 设置。",
+    "Delete saved API key (disable this provider if a key is required)": "删除已保存的 API 密钥（若服务需要密钥，请同时停用）"
 }

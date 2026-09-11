@@ -3046,5 +3046,9 @@
     "AI generated a draft, but it found no bills. Review the code and test again.": "AI generated a draft, but it found no bills. Review the code and test again.",
     "AI generated a draft, but its conditions do not match this email. Adjust them and test again.": "AI generated a draft, but its conditions do not match this email. Adjust them and test again.",
     "AI generated a draft, but its code failed validation. Edit the code and test again.": "AI generated a draft, but its code failed validation. Edit the code and test again.",
-    "Parser draft needs correction": "Parser draft needs correction"
+    "Parser draft needs correction": "Parser draft needs correction",
+    "AI Text Settings": "AI Text Settings",
+    "AI settings are managed by deployment environment variables.": "AI settings are managed by deployment environment variables.",
+    "Global AI settings can only be changed by the configured settings operator.": "Global AI settings can only be changed by the configured settings operator.",
+    "Delete saved API key (disable this provider if a key is required)": "Delete saved API key (disable this provider if a key is required)"
 }
