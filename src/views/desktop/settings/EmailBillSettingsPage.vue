@@ -144,7 +144,8 @@
                 </v-alert>
                 <v-select clearable :label="tt('Choose a Stored Email')" :items="messageOptions" item-title="title" item-value="value" v-model="testMessageId" @update:model-value="selectTestMessage" />
                 <v-row><v-col cols="12" md="6"><v-text-field :label="tt('Sender')" v-model="testMail.sender" /></v-col><v-col cols="12" md="6"><v-text-field :label="tt('Subject')" v-model="testMail.subject" /></v-col><v-col cols="12"><v-textarea rows="8" :label="tt('Email Body')" v-model="testMail.text" /></v-col></v-row>
-                <v-alert v-if="preview" class="mt-4" :type="preview.matched ? 'success' : 'info'" variant="tonal"><strong>{{ preview.matched ? tt('Matched') : tt('Not Matched') }}</strong> · {{ preview.bills.length }} {{ tt('bills') }} · {{ preview.durationMillis }} ms<pre v-if="preview.bills.length" class="preview-json mt-3">{{ JSON.stringify(preview.bills, null, 2) }}</pre></v-alert>
+                <v-alert v-if="generationWarning" class="mt-4" type="warning" variant="tonal">{{ tt(generationWarning) }}</v-alert>
+                <v-alert v-if="preview" class="mt-4" :type="preview.matched && preview.bills.length ? 'success' : 'warning'" variant="tonal"><strong>{{ preview.matched ? tt('Matched') : tt('Not Matched') }}</strong> · {{ preview.bills.length }} {{ tt('bills') }} · {{ preview.durationMillis }} ms<pre v-if="preview.bills.length" class="preview-json mt-3">{{ JSON.stringify(preview.bills, null, 2) }}</pre></v-alert>
                 <v-expansion-panels class="mt-4" variant="accordion">
                     <v-expansion-panel :title="tt('Parser API and AI Prompt')">
                         <v-expansion-panel-text>
@@ -159,7 +160,50 @@
         </v-card>
     </v-dialog>
 
-    <v-dialog v-model="routeDialog" max-width="760"><v-card :title="routeDraft.id ? tt('Edit Routing Rule') : tt('Add Routing Rule')"><v-card-text><v-row><v-col cols="12" md="6"><v-select :label="tt('Target Account')" :items="accountOptions" item-title="title" item-value="value" v-model="routeDraft.targetAccountId" /></v-col><v-col cols="12" md="3"><v-text-field type="number" :label="tt('Priority')" v-model.number="routeDraft.priority" /></v-col><v-col cols="12" md="3"><v-switch color="primary" :label="tt('Enabled')" v-model="routeDraft.enabled" /></v-col><v-col cols="12" md="6"><v-text-field :label="tt('Bank')" v-model.trim="routeDraft.bank" /></v-col><v-col cols="12" md="6"><v-text-field :label="tt('Account Kind')" v-model.trim="routeDraft.kind" /></v-col><v-col cols="12" md="6"><v-text-field :label="tt('Last Four Digits')" v-model.trim="routeDraft.last4" /></v-col><v-col cols="12" md="6"><v-text-field :label="tt('Currency')" v-model.trim="routeDraft.currency" /></v-col></v-row></v-card-text><v-card-actions><v-spacer /><v-btn variant="text" @click="routeDialog = false">{{ tt('Cancel') }}</v-btn><v-btn color="primary" :loading="saving" @click="saveRoute">{{ tt('Save') }}</v-btn></v-card-actions></v-card></v-dialog>
+    <v-dialog v-model="routeDialog" max-width="760" :persistent="saving">
+        <v-card :title="routeDraft.id ? tt('Edit Routing Rule') : tt('Add Routing Rule')">
+            <v-form :disabled="saving" @submit.prevent="saveRoute">
+                <v-card-text>
+                    <p class="text-body-2 text-medium-emphasis mb-5">{{ tt('Choose where to record bills. Bank and card filters are optional; leave them unrestricted to use this as a default account.') }}</p>
+                    <v-alert v-if="!routeAccountOptions.length" type="info" variant="tonal" class="mb-4">{{ tt('Create a bookkeeping account first, then return here to select it.') }}</v-alert>
+                    <v-row>
+                        <v-col cols="12">
+                            <v-autocomplete v-model="routeDraft.targetAccountId" :label="tt('Target Account')" :items="routeAccountOptions" item-title="title" item-value="value" :no-data-text="tt('No results')" @update:model-value="selectRouteAccount" />
+                        </v-col>
+                        <v-col cols="12" md="6">
+                            <v-select v-model="routeDraft.bank" :label="tt('Bank')" :items="routeBankOptions" item-title="title" item-value="value" :hint="tt('Banks come from your installed email parsers.')" persistent-hint />
+                        </v-col>
+                        <v-col cols="12" md="6">
+                            <v-select v-model="routeDraft.kind" :label="tt('Account Kind')" :items="routeKindOptions" item-title="title" item-value="value" />
+                        </v-col>
+                        <v-col cols="12" md="6">
+                            <v-autocomplete v-model="routeDraft.currency" :label="tt('Currency')" :items="routeCurrencyOptions" item-title="title" item-value="value" :no-data-text="tt('No results')" :hint="tt('Only bills in the target account currency can be imported.')" persistent-hint />
+                        </v-col>
+                        <v-col cols="12" md="6">
+                            <v-text-field v-model.trim="routeDraft.last4" :label="tt('Last Four Digits (optional)')" inputmode="numeric" maxlength="4" :hint="tt('Leave blank for all cards. Enter four digits only when you need to distinguish cards.')" persistent-hint :error-messages="routeLast4Error" />
+                        </v-col>
+                    </v-row>
+                    <v-alert v-if="routeDraft.targetAccountId" type="info" variant="tonal" class="mt-5">
+                        <div>{{ tt('Matching bills will be recorded in') }}: {{ accountName(routeDraft.targetAccountId) }}</div>
+                        <div class="text-body-2 mt-1">{{ routeSummary(routeDraft) }}</div>
+                    </v-alert>
+                    <v-expansion-panels variant="accordion" class="mt-5">
+                        <v-expansion-panel :title="tt('Advanced Rule Options')">
+                            <v-expansion-panel-text>
+                                <v-text-field v-model.number="routeDraft.priority" type="number" step="1" :label="tt('Priority')" :hint="tt('Keep 0 unless rules overlap. Higher priority rules are checked first.')" persistent-hint :error-messages="routePriorityError" />
+                                <v-switch v-model="routeDraft.enabled" color="primary" :label="tt('Enabled')" class="mt-3" hide-details />
+                            </v-expansion-panel-text>
+                        </v-expansion-panel>
+                    </v-expansion-panels>
+                </v-card-text>
+                <v-card-actions>
+                    <v-spacer />
+                    <v-btn variant="text" :disabled="saving" @click="routeDialog = false">{{ tt('Cancel') }}</v-btn>
+                    <v-btn color="primary" type="submit" :loading="saving" :disabled="!routeValid">{{ tt('Save') }}</v-btn>
+                </v-card-actions>
+            </v-form>
+        </v-card>
+    </v-dialog>
 
     <v-dialog v-model="classificationDialog" max-width="760"><v-card :title="classificationDraft.id ? tt('Edit Classification Rule') : tt('Add Classification Rule')"><v-card-text><v-row><v-col cols="12" md="8"><v-text-field :label="tt('Merchant Pattern')" v-model.trim="classificationDraft.merchantPattern" /></v-col><v-col cols="12" md="4"><v-select :label="tt('Match Type')" :items="matchTypes" v-model="classificationDraft.matchType" /></v-col><v-col cols="12" md="6"><v-select :label="tt('Category')" :items="categoryOptions" item-title="title" item-value="value" v-model="classificationDraft.categoryId" /></v-col><v-col cols="12" md="3"><v-text-field type="number" :label="tt('Priority')" v-model.number="classificationDraft.priority" /></v-col><v-col cols="12" md="3"><v-switch color="primary" :label="tt('Enabled')" v-model="classificationDraft.enabled" /></v-col><v-col cols="12" md="4"><v-text-field :label="tt('Bank Scope')" v-model.trim="classificationDraft.bank" /></v-col><v-col cols="12" md="4"><v-select clearable :label="tt('Account Scope')" :items="accountOptions" item-title="title" item-value="value" v-model="classificationDraft.accountId" /></v-col><v-col cols="12" md="4"><v-select clearable :label="tt('Flow Type')" :items="flowTypes" v-model="classificationDraft.flowType" /></v-col></v-row></v-card-text><v-card-actions><v-spacer /><v-btn variant="text" @click="classificationDialog = false">{{ tt('Cancel') }}</v-btn><v-btn color="primary" :loading="saving" @click="saveClassification">{{ tt('Save') }}</v-btn></v-card-actions></v-card></v-dialog>
 
@@ -188,7 +232,7 @@ import { useEmailBillStore } from '@/stores/emailBill.ts';
 type SnackBarType = InstanceType<typeof SnackBar>;
 type SelectOption = { title: string; value: string };
 
-const { tt } = useI18n();
+const { tt, getAllCurrencies } = useI18n();
 const store = useEmailBillStore();
 const snackbar = useTemplateRef<SnackBarType>('snackbar');
 
@@ -217,6 +261,7 @@ const accounts = ref<AccountInfoResponse[]>([]);
 const categories = ref<TransactionCategoryInfoResponse[]>([]);
 const auditEvents = ref<EmailBillAuditEvent[]>([]);
 const preview = ref<EmailBillParserPreview | null>(null);
+const generationWarning = ref('');
 const testMessageId = ref<string | null>(null);
 const parserSenders = ref('');
 const parserSubjects = ref('');
@@ -236,6 +281,26 @@ const weekdays = computed(() => ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Th
 const matchTypes = ['exact', 'contains', 'regex'];
 const flowTypes = ['expense', 'income', 'refund', 'transfer_in', 'transfer_out'];
 const accountOptions = computed<SelectOption[]>(() => flattenAccounts(accounts.value));
+const routeAccountOptions = computed<SelectOption[]>(() => {
+    const available = selectableRouteAccounts(accounts.value);
+    return flattenAccounts(accounts.value).filter(option => available.some(account => account.id === option.value));
+});
+const routeBankOptions = computed<SelectOption[]>(() => {
+    const codes = new Set(['cmb', ...store.parsers.map(rule => rule.bank), ...store.routes.map(rule => rule.bank), routeDraft.bank]);
+    return [{ title: tt('Any Bank'), value: '' }, ...[...codes].filter(Boolean).map(value => ({ title: bankLabel(value), value }))];
+});
+const routeKindOptions = computed<SelectOption[]>(() => {
+    const kinds = new Set(['debit', 'credit', ...store.routes.map(rule => rule.kind), routeDraft.kind]);
+    return [{ title: tt('Any Card Type'), value: '' }, ...[...kinds].filter(Boolean).map(value => ({ title: kindLabel(value), value }))];
+});
+const routeCurrencyOptions = computed<SelectOption[]>(() => [
+    { title: tt('Any Currency'), value: '' },
+    ...getAllCurrencies().map(currency => ({ title: `${currency.displayName} (${currency.currencyCode})`, value: currency.currencyCode }))
+]);
+const routeLast4Error = computed(() => routeDraft.last4 && !/^\d{4}$/.test(routeDraft.last4) ? tt('Enter exactly four digits or leave blank.') : '');
+const routePriorityError = computed(() => !Number.isInteger(routeDraft.priority) || routeDraft.priority < -2147483648 || routeDraft.priority > 2147483647 ? tt('Priority must be a whole number between -2147483648 and 2147483647.') : '');
+const routeValid = computed(() => routeAccountOptions.value.some(option => option.value === routeDraft.targetAccountId) && !routeLast4Error.value && !routePriorityError.value);
+
 const categoryOptions = computed<SelectOption[]>(() => flattenCategories(categories.value));
 const messageOptions = computed<SelectOption[]>(() => store.messages.map(item => ({ title: `${item.subject || tt('No Subject')} · ${item.sender}`, value: item.id })));
 const selectedCandidate = ref<EmailBillCandidate | null>(null);
@@ -301,18 +366,26 @@ function testWorkspaceMessage(detail: EmailBillMailboxDetail): void {
 }
 async function testMailbox(): Promise<void> { testingMailbox.value = true; try { resultOf(await services.testEmailBillSettings({ ...settings, mailPassword: mailPassword.value || undefined })); snackbar.value?.showMessage('Connection test succeeded'); } catch (error) { showError(error); } finally { testingMailbox.value = false; } }
 
-function openParser(rule?: EmailBillParserRule): void { Object.assign(parserDraft, rule ? JSON.parse(JSON.stringify(rule)) : createEmailBillParserRule()); parserSenders.value = parserDraft.matcher.senders.join(', '); parserSubjects.value = parserDraft.matcher.subjectContains.join(', '); preview.value = null; parserDialog.value = true; }
+function openParser(rule?: EmailBillParserRule): void {
+    generationWarning.value = ''; Object.assign(parserDraft, rule ? JSON.parse(JSON.stringify(rule)) : createEmailBillParserRule()); parserSenders.value = parserDraft.matcher.senders.join(', '); parserSubjects.value = parserDraft.matcher.subjectContains.join(', '); preview.value = null; parserDialog.value = true; }
 async function saveParser(): Promise<void> { saving.value = true; try { parserDraft.matcher = { senders: splitList(parserSenders.value), subjectContains: splitList(parserSubjects.value) }; await store.saveParser({ ...parserDraft }); parserDialog.value = false; snackbar.value?.showMessage('Data has been updated'); } catch (error) { showError(error); } finally { saving.value = false; } }
-async function testParser(): Promise<void> { testing.value = true; try { preview.value = await store.testParser({ matcher: { senders: splitList(parserSenders.value), subjectContains: splitList(parserSubjects.value) }, sourceCode: parserDraft.sourceCode, mail: { ...testMail } }); } catch (error) { showError(error); } finally { testing.value = false; } }
+async function testParser(): Promise<void> { generationWarning.value = ''; preview.value = null; testing.value = true; try { preview.value = await store.testParser({ matcher: { senders: splitList(parserSenders.value), subjectContains: splitList(parserSubjects.value) }, sourceCode: parserDraft.sourceCode, mail: { ...testMail } }); } catch (error) { showError(error); } finally { testing.value = false; } }
 async function generateParser(): Promise<void> {
+    generationWarning.value = '';
     generating.value = true;
     try {
         const generated = await store.generateParser({ mail: { ...testMail } });
         Object.assign(parserDraft, { name: generated.name, bank: generated.bank, sourceCode: generated.sourceCode });
         parserSenders.value = generated.matcher.senders.join(', ');
         parserSubjects.value = generated.matcher.subjectContains.join(', ');
-        preview.value = generated.preview;
-        snackbar.value?.showMessage('Parser draft has been generated and tested');
+        preview.value = generated.preview || null;
+        const warnings = {
+            no_bills: 'AI generated a draft, but it found no bills. Review the code and test again.',
+            not_matched: 'AI generated a draft, but its conditions do not match this email. Adjust them and test again.',
+            sandbox_failed: 'AI generated a draft, but its code failed validation. Edit the code and test again.'
+        };
+        generationWarning.value = generated.validationStatus && generated.validationStatus !== 'valid' ? warnings[generated.validationStatus] : '';
+        snackbar.value?.showMessage(generationWarning.value ? 'Parser draft needs correction' : 'Parser draft has been generated and tested');
     } catch (error) { showError(error); } finally { generating.value = false; }
 }
 async function disableParser(id: string): Promise<void> { try { await store.disableParser(id); } catch (error) { showError(error); } }
@@ -320,7 +393,7 @@ async function disableParser(id: string): Promise<void> { try { await store.disa
 function selectTestMessage(id: string | null): void { const item = store.messages.find(message => message.id === id); if (item) Object.assign(testMail, { messageId: item.messageId, sender: item.sender, subject: item.subject, receivedAt: item.receivedAt, text: item.text, headers: {} }); }
 
 function openRoute(rule?: EmailBillRoutingRule): void { Object.assign(routeDraft, rule ? { ...rule } : emptyRoute()); routeDialog.value = true; }
-async function saveRoute(): Promise<void> { saving.value = true; try { await store.saveRoute({ ...routeDraft }); routeDialog.value = false; snackbar.value?.showMessage('Data has been updated'); } catch (error) { showError(error); } finally { saving.value = false; } }
+async function saveRoute(): Promise<void> { if (!routeValid.value || saving.value) return; saving.value = true; try { await store.saveRoute({ ...routeDraft }); routeDialog.value = false; snackbar.value?.showMessage('Data has been updated'); } catch (error) { showError(error); } finally { saving.value = false; } }
 async function disableRoute(id: string): Promise<void> { try { await store.disableRoute(id); } catch (error) { showError(error); } }
 
 function openClassification(rule?: EmailBillClassificationRule): void { Object.assign(classificationDraft, rule ? { ...rule } : emptyClassification()); classificationDialog.value = true; }
@@ -340,7 +413,17 @@ function flattenAccounts(items: AccountInfoResponse[], prefix = ''): SelectOptio
 function flattenCategories(items: TransactionCategoryInfoResponse[], prefix = ''): SelectOption[] { return items.flatMap(item => [{ title: prefix + item.name, value: item.id }, ...flattenCategories(item.subCategories || [], `${prefix}${item.name} / `)]); }
 function accountName(id: string): string { return accountOptions.value.find(item => item.value === id)?.title || id || '—'; }
 function categoryName(id: string): string { return categoryOptions.value.find(item => item.value === id)?.title || id || '—'; }
-function routeSummary(rule: EmailBillRoutingRule): string { return [rule.bank, rule.kind, rule.last4 && `•••• ${rule.last4}`, rule.currency].filter(Boolean).join(' · ') || tt('Match Any'); }
+function bankLabel(bank: string): string { return bank === 'cmb' ? tt('China Merchants Bank') : bank; }
+function kindLabel(kind: string): string { return kind === 'debit' ? tt('Debit Card') : kind === 'credit' ? tt('Credit Card') : kind; }
+function selectableRouteAccounts(items: AccountInfoResponse[]): AccountInfoResponse[] {
+    return items.flatMap(item => [...(item.type === 1 ? [item] : []), ...selectableRouteAccounts(item.subAccounts || [])]);
+}
+function selectRouteAccount(id: string | null): void {
+    routeDraft.targetAccountId = id || '';
+    const account = selectableRouteAccounts(accounts.value).find(item => item.id === id);
+    if (account && !routeDraft.id) routeDraft.currency = account.currency;
+}
+function routeSummary(rule: EmailBillRoutingRule): string { return [rule.bank && bankLabel(rule.bank), rule.kind && kindLabel(rule.kind), rule.last4 && `•••• ${rule.last4}`, rule.currency].filter(Boolean).join(' · ') || tt('Match Any'); }
 function formatVariantAmount(item?: EmailBillCandidateVariant): string { return item ? `${(Math.abs(item.amount) / 100).toFixed(2)} ${item.currency}` : '—'; }
 function formatUnix(value: number): string { return value ? new Date(value * 1000).toLocaleString() : '—'; }
 function resultOf<T>(response: { data: { success: boolean; result: T } }): T { if (!response.data?.success) throw new Error('Email bill request failed'); return response.data.result; }

@@ -10,6 +10,7 @@ import (
 
 	"github.com/mayswind/ezbookkeeping/pkg/core"
 	"github.com/mayswind/ezbookkeeping/pkg/emailbill"
+	"github.com/mayswind/ezbookkeeping/pkg/errs"
 	"github.com/mayswind/ezbookkeeping/pkg/llm"
 	"github.com/mayswind/ezbookkeeping/pkg/llm/data"
 	"github.com/mayswind/ezbookkeeping/pkg/settings"
@@ -34,15 +35,16 @@ Every bill requires occurred_at (RFC3339), amount (positive decimal string), cur
 flow_type is expense, income, refund, transfer_in, or transfer_out.
 Optional fields are external_id, merchant, description, and account_hint with bank, kind, last4.
 Use an exact sender address and a stable, discriminating subject fragment. Generate code specifically for the sample while tolerating changing amounts, dates, identifiers, and merchants.
-For CMB messages, prefer parse_builtin so the maintained built-in parser is reused.`
+Use parse_builtin only for supported CMB daily credit-card and debit notification formats. Monthly statements and other formats require their own extraction logic. A builtin returning no bills does not prove that the sample has no transactions.`
 
 // EmailBillGeneratedParser is an unsaved parser draft generated from one sample.
 type EmailBillGeneratedParser struct {
-	Name       string                     `json:"name"`
-	Bank       string                     `json:"bank"`
-	Matcher    emailbill.ParserMatcher    `json:"matcher"`
-	SourceCode string                     `json:"sourceCode"`
-	Preview    *EmailBillParserTestResult `json:"preview,omitempty"`
+	ValidationStatus string                     `json:"validationStatus"`
+	Name             string                     `json:"name"`
+	Bank             string                     `json:"bank"`
+	Matcher          emailbill.ParserMatcher    `json:"matcher"`
+	SourceCode       string                     `json:"sourceCode"`
+	Preview          *EmailBillParserTestResult `json:"preview,omitempty"`
 }
 
 type emailBillGeneratedParserWire struct {
@@ -71,7 +73,7 @@ func NewConfiguredEmailBillParserCodeGenerator() *ConfiguredEmailBillParserCodeG
 func (g *ConfiguredEmailBillParserCodeGenerator) Generate(c core.Context, uid int64, mail EmailBillFetchedMessage) (EmailBillGeneratedParser, error) {
 	config := g.config.GetCurrentConfig()
 	if config == nil || config.TextRecognitionLLMConfig == nil || config.TextRecognitionLLMConfig.LLMProvider == "" {
-		return EmailBillGeneratedParser{}, fmt.Errorf("application AI is not configured")
+		return EmailBillGeneratedParser{}, errs.ErrLargeLanguageModelProviderNotEnabled
 	}
 	userPrompt, err := emailBillParserGenerationUserPrompt(mail)
 	if err != nil {
@@ -86,15 +88,19 @@ func (g *ConfiguredEmailBillParserCodeGenerator) Generate(c core.Context, uid in
 		return EmailBillGeneratedParser{}, err
 	}
 	if response == nil || strings.TrimSpace(response.Content) == "" {
-		return EmailBillGeneratedParser{}, fmt.Errorf("LLM returned an empty parser")
+		return EmailBillGeneratedParser{}, errs.ErrEmailParserInvalidResponse
 	}
-	return parseEmailBillGeneratedParser([]byte(response.Content))
+	draft, err := parseEmailBillGeneratedParser([]byte(response.Content))
+	if err != nil {
+		return EmailBillGeneratedParser{}, errs.ErrEmailParserInvalidResponse
+	}
+	return draft, nil
 }
 
 // GenerateParserDraft generates and dry-runs a parser without saving or importing anything.
 func (s *EmailBillAutomationService) GenerateParserDraft(c core.Context, uid int64, mail EmailBillFetchedMessage) (*EmailBillGeneratedParser, error) {
 	if s.generator == nil {
-		return nil, fmt.Errorf("parser generator is not configured")
+		return nil, errs.ErrLargeLanguageModelProviderNotEnabled
 	}
 	draft, err := s.generator.Generate(c, uid, mail)
 	if err != nil {
@@ -106,28 +112,30 @@ func (s *EmailBillAutomationService) GenerateParserDraft(c core.Context, uid int
 	draft.Matcher.Senders = normalizedGeneratedMatcherValues(draft.Matcher.Senders)
 	draft.Matcher.SubjectContains = normalizedGeneratedMatcherValues(draft.Matcher.SubjectContains)
 	if draft.Name == "" || draft.SourceCode == "" {
-		return nil, fmt.Errorf("generated parser name and source are required")
+		return nil, errs.ErrEmailParserInvalidResponse
 	}
 	if len(draft.Matcher.Senders) == 0 && len(draft.Matcher.SubjectContains) == 0 {
-		return nil, fmt.Errorf("generated parser must include a sender or subject matcher")
+		return nil, errs.ErrEmailParserInvalidResponse
 	}
 	preview, err := s.TestParser(EmailBillParserTestRequest{UID: uid, Matcher: draft.Matcher, SourceCode: draft.SourceCode, Mail: mail})
+	draft.ValidationStatus = "valid"
 	if err != nil {
-		return nil, fmt.Errorf("generated parser failed sandbox validation: %w", err)
-	}
-	if !preview.Matched {
-		return nil, fmt.Errorf("generated parser does not match the selected email")
-	}
-	if len(preview.Bills) == 0 {
-		return nil, fmt.Errorf("generated parser produced no bills for the selected email")
+		draft.ValidationStatus = "sandbox_failed"
+		return &draft, nil
 	}
 	draft.Preview = preview
+	if !preview.Matched {
+		draft.ValidationStatus = "not_matched"
+	} else if len(preview.Bills) == 0 {
+		draft.ValidationStatus = "no_bills"
+	}
+
 	return &draft, nil
 }
 
 func emailBillParserGenerationUserPrompt(mail EmailBillFetchedMessage) ([]byte, error) {
 	if len(mail.Text) > maxEmailBillParserGenerationTextBytes {
-		return nil, fmt.Errorf("email text exceeds %d bytes", maxEmailBillParserGenerationTextBytes)
+		return nil, errs.ErrEmailParserSampleTooLarge
 	}
 	payload := struct {
 		MessageID  string            `json:"message_id"`

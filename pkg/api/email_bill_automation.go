@@ -9,6 +9,7 @@ import (
 	"github.com/mayswind/ezbookkeeping/pkg/core"
 	"github.com/mayswind/ezbookkeeping/pkg/emailbill"
 	"github.com/mayswind/ezbookkeeping/pkg/errs"
+	"github.com/mayswind/ezbookkeeping/pkg/log"
 	"github.com/mayswind/ezbookkeeping/pkg/services"
 )
 
@@ -199,7 +200,8 @@ func (a *EmailBillAutomationApi) ParserTestHandler(c *core.WebContext) (any, *er
 	}
 	result, err := a.service.TestParser(serviceRequest)
 	if err != nil {
-		return nil, errs.NewIncompleteOrIncorrectSubmissionError(err)
+		log.Warnf(c, "[email_bill.ParserTestHandler] sandbox validation failed uid=%d", c.GetCurrentUid())
+		return nil, errs.ErrEmailParserTestFailed
 	}
 	return result, nil
 }
@@ -216,8 +218,11 @@ func (a *EmailBillAutomationApi) ParserGenerateHandler(c *core.WebContext) (any,
 	}
 	draft, err := a.service.GenerateParserDraft(c, c.GetCurrentUid(), mail)
 	if err != nil {
-		return nil, errs.NewIncompleteOrIncorrectSubmissionError(err)
+		failure := errs.Or(err, errs.ErrEmailParserGenerationFailed)
+		log.Warnf(c, "[email_bill.ParserGenerateHandler] generation failed uid=%d code=%d", c.GetCurrentUid(), failure.Code())
+		return nil, failure
 	}
+	log.Infof(c, "[email_bill.ParserGenerateHandler] draft generated uid=%d validation=%s", c.GetCurrentUid(), draft.ValidationStatus)
 	return draft, nil
 }
 

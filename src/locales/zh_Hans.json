@@ -1087,6 +1087,11 @@
         "custom": "用户自定义"
     },
     "error": {
+        "AI parser generation failed": "AI 规则生成失败，请检查模型设置后重试。",
+        "AI returned an invalid parser draft": "AI 返回的规则格式不正确，请重新生成。",
+        "email sample exceeds the parser generation size limit": "邮件样本超过 128 KiB，请缩小样本后重新生成。",
+        "parser execution or bill validation failed": "解析脚本执行或账单字段校验失败，请检查规则代码。",
+
         "system error": "系统错误",
         "api not found": "接口调用失败",
         "not implemented": "未实现",
@@ -3021,5 +3026,25 @@
     "Saved scope applies to manual and scheduled runs. The current task keeps its original scope.": "保存后对手动和定时任务生效，当前运行中的任务仍使用原范围。",
     "Save the folder selection before running a new scan.": "目录选择尚未保存，请保存后再运行扫描。",
     "The full body was not retained or has expired. Only matching emails are downloaded; enable body retention in Mailbox & Schedule for future scans.": "正文未保存或已过期。系统只下载匹配规则的邮件；可在“邮箱与计划”中开启正文保留，用于后续扫描。",
-    "Parser matching failed after downloading": "下载正文后，解析规则未匹配"
+    "Parser matching failed after downloading": "下载正文后，解析规则未匹配",
+    "Choose where to record bills. Bank and card filters are optional; leave them unrestricted to use this as a default account.": "选择账单记入哪个账户。银行和卡种条件均可选；选择不限即可作为默认记账账户。",
+    "Create a bookkeeping account first, then return here to select it.": "请先创建记账账户，再回到这里选择。",
+    "Banks come from your installed email parsers.": "银行选项来自已安装的邮件解析模板。",
+    "Only bills in the target account currency can be imported.": "只能导入与目标账户币种一致的账单。",
+    "Last Four Digits (optional)": "卡号后四位（选填）",
+    "Leave blank for all cards. Enter four digits only when you need to distinguish cards.": "留空表示所有卡片；仅在需要区分多张卡时填写四位数字。",
+    "Matching bills will be recorded in": "符合条件的账单将记入",
+    "Advanced Rule Options": "高级规则选项",
+    "Keep 0 unless rules overlap. Higher priority rules are checked first.": "通常保持 0 即可；多条规则重叠时，优先使用数值较大的规则。",
+    "Any Bank": "不限银行",
+    "Any Card Type": "不限卡种",
+    "Any Currency": "不限币种",
+    "Enter exactly four digits or leave blank.": "请输入四位数字，或留空。",
+    "Priority must be a whole number between -2147483648 and 2147483647.": "优先级必须是 -2147483648 至 2147483647 之间的整数。",
+    "China Merchants Bank": "招商银行",
+    "Debit Card": "储蓄卡",
+    "AI generated a draft, but it found no bills. Review the code and test again.": "AI 已生成草稿，但未识别到账单。请检查代码后重新试解析。",
+    "AI generated a draft, but its conditions do not match this email. Adjust them and test again.": "AI 已生成草稿，但匹配条件未命中这封邮件。请调整条件后重新试解析。",
+    "AI generated a draft, but its code failed validation. Edit the code and test again.": "AI 已生成草稿，但代码未通过校验。请修改代码后重新试解析。",
+    "Parser draft needs correction": "解析规则草稿需要调整"
 }

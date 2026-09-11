@@ -106,3 +106,21 @@ func TestMoneyToMinorRoundsHalfUp(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, int64(124), minor)
 }
+
+// HTML bank statements use NBSP and narrow NBSP between table cells.
+func TestCMBCreditParserParsesUnicodeCellWhitespace(t *testing.T) {
+	for _, separator := range []string{"\u00a0", "\u202f", "\u3000"} {
+		t.Run(separator, func(t *testing.T) {
+			body := "2026/09/06\n11:03:15" + separator + "CNY" + separator + "12.34" + separator + "尾号1234" + separator + "消费" + separator + "示例商户\n" +
+				"12:04:05" + separator + "CNY" + separator + "-5.67" + separator + "尾号1234" + separator + "退货" + separator + "示例商户"
+			transactions, err := NewCMBCreditParser().Parse(body, time.Date(2026, 9, 7, 9, 0, 0, 0, testLocation(t)))
+			require.NoError(t, err)
+			require.Len(t, transactions, 2)
+			assert.Equal(t, int64(-1234), transactions[0].AmountMinor)
+			assert.Equal(t, int64(567), transactions[1].AmountMinor)
+			assert.Equal(t, "示例商户", transactions[0].Merchant)
+			assert.Equal(t, "示例商户", transactions[1].Merchant)
+			assert.Equal(t, 6, transactions[0].OccurredAt.Day())
+		})
+	}
+}

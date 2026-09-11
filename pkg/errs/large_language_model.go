@@ -11,4 +11,8 @@ var (
 	ErrNoTransactionInformation             = NewNormalError(NormalSubcategoryLargeLanguageModel, 4, http.StatusBadRequest, "no transaction information detected")
 	ErrNoAIRecognitionText                  = NewNormalError(NormalSubcategoryLargeLanguageModel, 5, http.StatusBadRequest, "no text for AI recognition")
 	ErrAIRecognitionTextIsEmpty             = NewNormalError(NormalSubcategoryLargeLanguageModel, 6, http.StatusBadRequest, "text for AI recognition is empty")
+	ErrEmailParserGenerationFailed          = NewNormalError(NormalSubcategoryLargeLanguageModel, 7, http.StatusBadGateway, "AI parser generation failed")
+	ErrEmailParserInvalidResponse           = NewNormalError(NormalSubcategoryLargeLanguageModel, 8, http.StatusBadGateway, "AI returned an invalid parser draft")
+	ErrEmailParserSampleTooLarge            = NewNormalError(NormalSubcategoryLargeLanguageModel, 9, http.StatusBadRequest, "email sample exceeds the parser generation size limit")
+	ErrEmailParserTestFailed                = NewNormalError(NormalSubcategoryLargeLanguageModel, 10, http.StatusUnprocessableEntity, "parser execution or bill validation failed")
 )

@@ -69,7 +69,7 @@ func (s *EmailBillAutomationService) TestParser(request EmailBillParserTestReque
 		MessageID: request.Mail.RemoteMessageID, Sender: request.Mail.Sender, Subject: request.Mail.Subject,
 		ReceivedAt: request.Mail.ReceivedAt, Text: request.Mail.Text, Headers: request.Mail.Headers,
 	}
-	result := &EmailBillParserTestResult{}
+	result := &EmailBillParserTestResult{Bills: make([]EmailBillParserPreviewBill, 0)}
 	if !request.Matcher.Matches(mail) {
 		return result, nil
 	}

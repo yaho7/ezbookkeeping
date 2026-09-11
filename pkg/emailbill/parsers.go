@@ -11,8 +11,8 @@ import (
 
 var (
 	creditDatePattern        = regexp.MustCompile(`\d{4}/\d{2}/\d{2}`)
-	creditTransactionPattern = regexp.MustCompile(`(?m)(\d{2}:\d{2}:\d{2})\s+CNY\s+(-?\d+(?:\.\d+)?)\s+`)
-	creditCardPrefixPattern  = regexp.MustCompile(`尾号\d+\s*(?:消费|退货|预授权完成)\s*`)
+	creditTransactionPattern = regexp.MustCompile(`(?m)(\d{2}:\d{2}:\d{2})[\s\p{Zs}]+CNY[\s\p{Zs}]+(-?\d+(?:\.\d+)?)[\s\p{Zs}]+`)
+	creditCardPrefixPattern  = regexp.MustCompile(`尾号\d+[\s\p{Zs}]*(?:消费|退货|预授权完成)[\s\p{Zs}]*`)
 	shortDatePattern         = regexp.MustCompile(`^(\d{2})月(\d{2})日$`)
 	moneyPattern             = regexp.MustCompile(`^(-?)(\d+)(?:\.(\d+))?$`)
 )
