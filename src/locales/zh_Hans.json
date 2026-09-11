@@ -1087,6 +1087,11 @@
         "custom": "用户自定义"
     },
     "error": {
+        "AI parser generation failed": "AI 规则生成失败，请检查模型设置后重试。",
+        "AI returned an invalid parser draft": "AI 返回的规则格式不正确，请重新生成。",
+        "email sample exceeds the parser generation size limit": "邮件样本超过 128 KiB，请缩小样本后重新生成。",
+        "parser execution or bill validation failed": "解析脚本执行或账单字段校验失败，请检查规则代码。",
+
         "system error": "系统错误",
         "api not found": "接口调用失败",
         "not implemented": "未实现",
@@ -3037,5 +3042,9 @@
     "Enter exactly four digits or leave blank.": "请输入四位数字，或留空。",
     "Priority must be a whole number between -2147483648 and 2147483647.": "优先级必须是 -2147483648 至 2147483647 之间的整数。",
     "China Merchants Bank": "招商银行",
-    "Debit Card": "储蓄卡"
+    "Debit Card": "储蓄卡",
+    "AI generated a draft, but it found no bills. Review the code and test again.": "AI 已生成草稿，但未识别到账单。请检查代码后重新试解析。",
+    "AI generated a draft, but its conditions do not match this email. Adjust them and test again.": "AI 已生成草稿，但匹配条件未命中这封邮件。请调整条件后重新试解析。",
+    "AI generated a draft, but its code failed validation. Edit the code and test again.": "AI 已生成草稿，但代码未通过校验。请修改代码后重新试解析。",
+    "Parser draft needs correction": "解析规则草稿需要调整"
 }

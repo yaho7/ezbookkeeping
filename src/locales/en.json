@@ -1087,6 +1087,11 @@
         "custom": "User Custom"
     },
     "error": {
+        "AI parser generation failed": "AI parser generation failed",
+        "AI returned an invalid parser draft": "AI returned an invalid parser draft",
+        "email sample exceeds the parser generation size limit": "email sample exceeds the parser generation size limit",
+        "parser execution or bill validation failed": "parser execution or bill validation failed",
+
         "system error": "System Error",
         "api not found": "Failed to request API",
         "not implemented": "Not implemented",
@@ -3037,5 +3042,9 @@
     "Enter exactly four digits or leave blank.": "Enter exactly four digits or leave blank.",
     "Priority must be a whole number between -2147483648 and 2147483647.": "Priority must be a whole number between -2147483648 and 2147483647.",
     "China Merchants Bank": "China Merchants Bank",
-    "Debit Card": "Debit Card"
+    "Debit Card": "Debit Card",
+    "AI generated a draft, but it found no bills. Review the code and test again.": "AI generated a draft, but it found no bills. Review the code and test again.",
+    "AI generated a draft, but its conditions do not match this email. Adjust them and test again.": "AI generated a draft, but its conditions do not match this email. Adjust them and test again.",
+    "AI generated a draft, but its code failed validation. Edit the code and test again.": "AI generated a draft, but its code failed validation. Edit the code and test again.",
+    "Parser draft needs correction": "Parser draft needs correction"
 }

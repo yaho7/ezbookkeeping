@@ -110,7 +110,8 @@ export interface EmailBillGeneratedParser {
     bank: string;
     matcher: EmailBillMatcher;
     sourceCode: string;
-    preview: EmailBillParserPreview;
+    preview?: EmailBillParserPreview;
+    validationStatus?: 'valid' | 'no_bills' | 'not_matched' | 'sandbox_failed';
 }
 
 export interface EmailBillRoutingRule {

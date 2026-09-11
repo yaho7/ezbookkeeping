@@ -144,7 +144,8 @@
                 </v-alert>
                 <v-select clearable :label="tt('Choose a Stored Email')" :items="messageOptions" item-title="title" item-value="value" v-model="testMessageId" @update:model-value="selectTestMessage" />
                 <v-row><v-col cols="12" md="6"><v-text-field :label="tt('Sender')" v-model="testMail.sender" /></v-col><v-col cols="12" md="6"><v-text-field :label="tt('Subject')" v-model="testMail.subject" /></v-col><v-col cols="12"><v-textarea rows="8" :label="tt('Email Body')" v-model="testMail.text" /></v-col></v-row>
-                <v-alert v-if="preview" class="mt-4" :type="preview.matched ? 'success' : 'info'" variant="tonal"><strong>{{ preview.matched ? tt('Matched') : tt('Not Matched') }}</strong> · {{ preview.bills.length }} {{ tt('bills') }} · {{ preview.durationMillis }} ms<pre v-if="preview.bills.length" class="preview-json mt-3">{{ JSON.stringify(preview.bills, null, 2) }}</pre></v-alert>
+                <v-alert v-if="generationWarning" class="mt-4" type="warning" variant="tonal">{{ tt(generationWarning) }}</v-alert>
+                <v-alert v-if="preview" class="mt-4" :type="preview.matched && preview.bills.length ? 'success' : 'warning'" variant="tonal"><strong>{{ preview.matched ? tt('Matched') : tt('Not Matched') }}</strong> · {{ preview.bills.length }} {{ tt('bills') }} · {{ preview.durationMillis }} ms<pre v-if="preview.bills.length" class="preview-json mt-3">{{ JSON.stringify(preview.bills, null, 2) }}</pre></v-alert>
                 <v-expansion-panels class="mt-4" variant="accordion">
                     <v-expansion-panel :title="tt('Parser API and AI Prompt')">
                         <v-expansion-panel-text>
@@ -260,6 +261,7 @@ const accounts = ref<AccountInfoResponse[]>([]);
 const categories = ref<TransactionCategoryInfoResponse[]>([]);
 const auditEvents = ref<EmailBillAuditEvent[]>([]);
 const preview = ref<EmailBillParserPreview | null>(null);
+const generationWarning = ref('');
 const testMessageId = ref<string | null>(null);
 const parserSenders = ref('');
 const parserSubjects = ref('');
@@ -364,18 +366,26 @@ function testWorkspaceMessage(detail: EmailBillMailboxDetail): void {
 }
 async function testMailbox(): Promise<void> { testingMailbox.value = true; try { resultOf(await services.testEmailBillSettings({ ...settings, mailPassword: mailPassword.value || undefined })); snackbar.value?.showMessage('Connection test succeeded'); } catch (error) { showError(error); } finally { testingMailbox.value = false; } }
 
-function openParser(rule?: EmailBillParserRule): void { Object.assign(parserDraft, rule ? JSON.parse(JSON.stringify(rule)) : createEmailBillParserRule()); parserSenders.value = parserDraft.matcher.senders.join(', '); parserSubjects.value = parserDraft.matcher.subjectContains.join(', '); preview.value = null; parserDialog.value = true; }
+function openParser(rule?: EmailBillParserRule): void {
+    generationWarning.value = ''; Object.assign(parserDraft, rule ? JSON.parse(JSON.stringify(rule)) : createEmailBillParserRule()); parserSenders.value = parserDraft.matcher.senders.join(', '); parserSubjects.value = parserDraft.matcher.subjectContains.join(', '); preview.value = null; parserDialog.value = true; }
 async function saveParser(): Promise<void> { saving.value = true; try { parserDraft.matcher = { senders: splitList(parserSenders.value), subjectContains: splitList(parserSubjects.value) }; await store.saveParser({ ...parserDraft }); parserDialog.value = false; snackbar.value?.showMessage('Data has been updated'); } catch (error) { showError(error); } finally { saving.value = false; } }
-async function testParser(): Promise<void> { testing.value = true; try { preview.value = await store.testParser({ matcher: { senders: splitList(parserSenders.value), subjectContains: splitList(parserSubjects.value) }, sourceCode: parserDraft.sourceCode, mail: { ...testMail } }); } catch (error) { showError(error); } finally { testing.value = false; } }
+async function testParser(): Promise<void> { generationWarning.value = ''; preview.value = null; testing.value = true; try { preview.value = await store.testParser({ matcher: { senders: splitList(parserSenders.value), subjectContains: splitList(parserSubjects.value) }, sourceCode: parserDraft.sourceCode, mail: { ...testMail } }); } catch (error) { showError(error); } finally { testing.value = false; } }
 async function generateParser(): Promise<void> {
+    generationWarning.value = '';
     generating.value = true;
     try {
         const generated = await store.generateParser({ mail: { ...testMail } });
         Object.assign(parserDraft, { name: generated.name, bank: generated.bank, sourceCode: generated.sourceCode });
         parserSenders.value = generated.matcher.senders.join(', ');
         parserSubjects.value = generated.matcher.subjectContains.join(', ');
-        preview.value = generated.preview;
-        snackbar.value?.showMessage('Parser draft has been generated and tested');
+        preview.value = generated.preview || null;
+        const warnings = {
+            no_bills: 'AI generated a draft, but it found no bills. Review the code and test again.',
+            not_matched: 'AI generated a draft, but its conditions do not match this email. Adjust them and test again.',
+            sandbox_failed: 'AI generated a draft, but its code failed validation. Edit the code and test again.'
+        };
+        generationWarning.value = generated.validationStatus && generated.validationStatus !== 'valid' ? warnings[generated.validationStatus] : '';
+        snackbar.value?.showMessage(generationWarning.value ? 'Parser draft needs correction' : 'Parser draft has been generated and tested');
     } catch (error) { showError(error); } finally { generating.value = false; }
 }
 async function disableParser(id: string): Promise<void> { try { await store.disableParser(id); } catch (error) { showError(error); } }
