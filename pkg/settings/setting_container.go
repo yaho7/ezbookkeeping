@@ -72,6 +72,10 @@ func cloneEmailBillConfig(config *EmailBillConfig) *EmailBillConfig {
 
 	cloned := *config
 	cloned.Folders = append([]string(nil), config.Folders...)
+	if config.Notification != nil {
+		notification := *config.Notification
+		cloned.Notification = &notification
+	}
 	return &cloned
 }
 

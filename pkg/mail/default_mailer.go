@@ -3,6 +3,7 @@ package mail
 import (
 	"crypto/tls"
 	"net"
+	"time"
 
 	"gopkg.in/mail.v2"
 
@@ -15,6 +16,18 @@ import (
 type DefaultMailer struct {
 	dialer      *mail.Dialer
 	fromAddress string
+}
+
+// NewSecureMailer requires encrypted SMTP and bounds each transport operation.
+func NewSecureMailer(config *settings.SMTPConfig) (*DefaultMailer, error) {
+	m, err := NewDefaultMailer(config)
+	if err != nil {
+		return nil, err
+	}
+	m.dialer.StartTLSPolicy = mail.MandatoryStartTLS
+	m.dialer.TLSConfig.InsecureSkipVerify = false
+	m.dialer.Timeout = 15 * time.Second
+	return m, nil
 }
 
 // NewDefaultMailer returns a new default mailer

@@ -246,6 +246,7 @@ type SMTPConfig struct {
 
 // EmailBillConfig represents the built-in email bill importer configuration.
 type EmailBillConfig struct {
+	Notification          *EmailBillNotificationConfig
 	FolderMode            string
 	Folders               []string
 	Enabled               bool
@@ -1080,6 +1081,17 @@ func loadEmailBillConfiguration(config *Config, configFile *ini.File, sectionNam
 		RawEmailRetentionDays: getConfigItemUint32Value(configFile, sectionName, "raw_email_retention_days", 30),
 	}
 	config.EmailBillConfig = emailBillConfig
+	emailBillConfig.Notification = &EmailBillNotificationConfig{
+		Enabled:               getConfigItemBoolValue(configFile, sectionName, "notification_enabled", false),
+		Mode:                  getConfigItemStringValue(configFile, sectionName, "notification_mode", "always"),
+		Recipient:             getConfigItemStringValue(configFile, sectionName, "notification_recipient"),
+		SMTPServer:            getConfigItemStringValue(configFile, sectionName, "notification_smtp_server"),
+		SMTPPort:              getConfigItemUint16Value(configFile, sectionName, "notification_smtp_port", 0),
+		SMTPUser:              getConfigItemStringValue(configFile, sectionName, "notification_smtp_user"),
+		SMTPPassword:          getConfigItemStringValue(configFile, sectionName, "notification_smtp_password"),
+		FromAddress:           getConfigItemStringValue(configFile, sectionName, "notification_from_address"),
+		UseMailboxCredentials: getConfigItemBoolValue(configFile, sectionName, "notification_use_mailbox_credentials", true),
+	}
 	if err := json.Unmarshal([]byte(getConfigItemStringValue(configFile, sectionName, "folders", "[]")), &emailBillConfig.Folders); err != nil {
 		return fmt.Errorf("invalid email bill folder list: %w", err)
 	}
@@ -1155,6 +1167,9 @@ func NormalizeEmailBillConfiguration(emailBillConfig *EmailBillConfig) error {
 	mailDomain := emailDomain(emailBillConfig.MailUser)
 	if emailBillConfig.IMAPServer == "" && mailDomain != "" {
 		emailBillConfig.IMAPServer = defaultIMAPServer(mailDomain)
+	}
+	if err := NormalizeEmailBillNotification(emailBillConfig, false); err != nil {
+		return err
 	}
 	if !emailBillConfig.Enabled {
 		return nil

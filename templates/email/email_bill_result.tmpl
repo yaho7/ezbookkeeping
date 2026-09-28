@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="{{.Language}}">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>{{.Title}}</title></head>
+<body style="margin:0;padding:0;background:#f3f5f8;color:#243246;font-family:Arial,'PingFang SC','Microsoft YaHei',sans-serif;line-height:1.6;">
+<div style="display:none;max-height:0;overflow:hidden;opacity:0;">{{.Title}} · {{.Imported}} {{index .Copy "imported"}}</div>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;"><tr><td align="center" style="padding:28px 12px;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:620px;border-collapse:collapse;background:#fff;border-radius:8px;">
+<tr><td style="padding:24px 28px 18px;border-bottom:1px solid #e5e9ef;"><strong style="font-size:19px;">ezBookkeeping</strong><div style="font-size:12px;color:#66758a;">{{.Time}}</div></td></tr>
+<tr><td style="padding:26px 28px 20px;border-left:4px solid {{.Accent}};">
+<div style="font-size:13px;font-weight:bold;color:{{.Accent}};">{{.Status}}</div>
+<h1 style="margin:8px 0 10px;font-size:25px;font-weight:600;line-height:1.4;">{{.Title}}</h1>
+<p style="margin:0;color:#59697d;font-size:14px;">{{.Description}}</p>
+</td></tr>
+{{if not .Test}}
+<tr><td style="padding:0 28px 20px;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;border-top:1px solid #e5e9ef;border-bottom:1px solid #e5e9ef;"><tr>
+<td style="padding:16px 4px 16px 0;vertical-align:top;"><div style="font-size:24px;font-weight:bold;">{{.Imported}}</div><div style="font-size:12px;color:#66758a;">{{index .Copy "imported"}}</div></td>
+<td style="padding:16px 4px;vertical-align:top;"><div style="font-size:24px;">{{.Scanned}}</div><div style="font-size:12px;color:#66758a;">{{index .Copy "scanned"}}</div></td>
+{{if .Failed}}<td style="padding:16px 0 16px 4px;vertical-align:top;"><div style="font-size:24px;color:#b42318;">{{.Failed}}</div><div style="font-size:12px;color:#66758a;">{{index .Copy "failed"}}</div></td>{{end}}
+</tr></table></td></tr>
+{{end}}
+{{if .Currencies}}<tr><td style="padding:0 28px 20px;"><table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;font-size:14px;">
+{{range .Currencies}}<tr><td style="padding:4px 0;color:#66758a;">{{index $.Copy "expense"}} · {{.Currency}}</td><td style="padding:4px 0;text-align:right;font-weight:bold;">{{.ExpenseText}}</td></tr>
+{{if .Income}}<tr><td style="padding:4px 0;color:#66758a;">{{index $.Copy "income"}} · {{.Currency}}</td><td style="padding:4px 0;text-align:right;">{{.IncomeText}}</td></tr>{{end}}{{end}}
+</table></td></tr>{{end}}
+{{if .Entries}}<tr><td style="padding:0 28px 22px;"><h2 style="margin:0 0 10px;font-size:15px;font-weight:600;">{{index .Copy "entries"}}</h2>
+<table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;font-size:14px;">
+<tr><th align="left" style="padding:7px 0;font-weight:normal;font-size:12px;color:#66758a;">{{index .Copy "merchant"}}</th><th align="right" style="padding:7px 0;font-weight:normal;font-size:12px;color:#66758a;">{{index .Copy "amount"}}</th></tr>
+{{range .Entries}}<tr><td style="padding:11px 10px 11px 0;border-top:1px solid #edf0f4;word-break:break-word;">{{.Merchant}}<div style="font-size:12px;color:#66758a;">{{.Category}}</div></td><td style="padding:11px 0;border-top:1px solid #edf0f4;text-align:right;white-space:nowrap;vertical-align:top;">{{.Amount}}</td></tr>{{end}}
+</table>{{if .More}}<p style="margin:10px 0 0;font-size:12px;color:#66758a;">{{index .Copy "more"}}</p>{{end}}</td></tr>{{end}}
+{{if .Uncategorized}}<tr><td style="padding:0 28px 20px;"><p style="margin:0;font-size:13px;color:#806027;">{{.Uncategorized}} {{index .Copy "uncategorized"}} · {{index .Copy "fallback"}}</p></td></tr>{{end}}
+{{if or .Error .Failed}}<tr><td style="padding:0 28px 22px;"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#fff5f4;border-left:3px solid #b42318;"><tr><td style="padding:14px 16px;"><strong style="font-size:14px;color:#b42318;">{{index .Copy "error"}}</strong><p style="margin:6px 0 0;font-size:13px;word-break:break-word;">{{if .Error}}{{.Error}}{{else}}{{index .Copy "failedDescription"}}{{end}}</p></td></tr></table></td></tr>{{end}}
+<tr><td style="padding:0 28px 26px;"><a href="{{.URL}}" style="display:inline-block;padding:11px 20px;background:#c67e48;color:#fff;text-decoration:none;font-size:14px;font-weight:bold;border-radius:5px;">{{index .Copy "open"}}</a></td></tr>
+<tr><td style="padding:18px 28px;border-top:1px solid #e5e9ef;color:#66758a;font-size:12px;">
+{{if .Folders}}<div>{{index .Copy "folder"}}: {{range $i,$folder := .Folders}}{{if $i}}, {{end}}{{$folder}}{{end}}</div>{{end}}
+{{if .Duration}}<div>{{index .Copy "duration"}}: {{.Duration}}</div>{{end}}
+<p style="margin:10px 0 0;">{{index .Copy "footer"}}</p>
+</td></tr>
+</table></td></tr></table>
+</body></html>

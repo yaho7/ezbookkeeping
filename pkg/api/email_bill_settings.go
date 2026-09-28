@@ -71,7 +71,9 @@ func (a *EmailBillSettingsApi) UpdateHandler(c *core.WebContext) (any, *errs.Err
 	emailConfig, err := buildEmailBillConfig(user.Username, request, currentEmailConfig)
 	if err != nil {
 		log.Warnf(c, "[email_bill_settings.UpdateHandler] invalid settings for user \"uid:%d\", because %s", uid, err.Error())
-		return false, errs.NewIncompleteOrIncorrectSubmissionError(err)
+		validation := *errs.ErrIncompleteOrIncorrectSubmission
+		validation.Message = err.Error()
+		return false, &validation
 	}
 	if err = settings.SaveEmailBillConfiguration(currentConfig.ConfigFilePath, emailConfig); err != nil {
 		log.Errorf(c, "[email_bill_settings.UpdateHandler] failed to persist settings, because %s", err.Error())
@@ -204,16 +206,44 @@ func buildEmailBillConfig(username string, request *models.EmailBillSettingsUpda
 		RetainRawEmails:       request.RetainRawEmails,
 		RawEmailRetentionDays: request.RawEmailRetentionDays,
 	}
+	var notification *settings.EmailBillNotificationConfig
+	if current != nil {
+		notification = current.Notification
+	}
+	config.Notification = buildEmailBillNotificationConfig(request.Notification, notification)
 	return config, settings.NormalizeEmailBillConfiguration(config)
 }
 
+func buildEmailBillNotificationConfig(request *models.EmailBillNotificationSettingsRequest, current *settings.EmailBillNotificationConfig) *settings.EmailBillNotificationConfig {
+	if request == nil {
+		if current == nil {
+			return nil
+		}
+		copy := *current
+		return &copy
+	}
+	password := request.SMTPPassword
+	if password == "" && current != nil && strings.EqualFold(strings.TrimSpace(request.SMTPServer), current.SMTPServer) && request.SMTPPort == current.SMTPPort && strings.TrimSpace(request.SMTPUser) == current.SMTPUser {
+		password = current.SMTPPassword
+	}
+	return &settings.EmailBillNotificationConfig{Enabled: request.Enabled, Mode: request.Mode, Recipient: request.Recipient, SMTPServer: request.SMTPServer, SMTPPort: request.SMTPPort, SMTPUser: request.SMTPUser, SMTPPassword: password, FromAddress: request.FromAddress, UseMailboxCredentials: request.UseMailboxCredentials}
+}
+
 func emailBillSettingsResponse(config *settings.EmailBillConfig) *models.EmailBillSettingsResponse {
+	copy := *config
+	if config.Notification != nil {
+		n := *config.Notification
+		copy.Notification = &n
+	}
+	_ = settings.NormalizeEmailBillNotification(&copy, false)
+	n := copy.Notification
 	mode := config.FolderMode
 	if mode == "" {
 		mode = "all"
 	}
 	return &models.EmailBillSettingsResponse{
-		FolderMode: mode, Folders: append([]string{}, config.Folders...),
+		Notification: &models.EmailBillNotificationSettingsResponse{Enabled: n.Enabled, Mode: n.Mode, Recipient: n.Recipient, SMTPServer: n.SMTPServer, SMTPPort: n.SMTPPort, SMTPUser: n.SMTPUser, PasswordConfigured: n.SMTPPassword != "", FromAddress: n.FromAddress, UseMailboxCredentials: n.UseMailboxCredentials},
+		FolderMode:   mode, Folders: append([]string{}, config.Folders...),
 		Enabled:               config.Enabled,
 		IMAPServer:            config.IMAPServer,
 		IMAPPort:              config.IMAPPort,

@@ -31,6 +31,7 @@ func TestSaveEmailBillConfigurationPreservesOtherSections(t *testing.T) {
 		MaxMessageBytes:    2 * 1024 * 1024,
 		FolderMode:         "selected",
 		Folders:            []string{"其他文件夹/账单", "Archive,2026"},
+		Notification:       &EmailBillNotificationConfig{Enabled: true, Mode: "always", Recipient: "alice@qq.com", SMTPServer: "smtp.qq.com", SMTPPort: 465, SMTPUser: "alice@qq.com", UseMailboxCredentials: true},
 	}
 
 	require.NoError(t, SaveEmailBillConfiguration(configPath, emailConfig))
@@ -48,6 +49,9 @@ func TestSaveEmailBillConfigurationPreservesOtherSections(t *testing.T) {
 	require.NoError(t, loadEmailBillConfiguration(loaded, configFile, "email_bill"))
 	assert.Equal(t, "selected", loaded.EmailBillConfig.FolderMode)
 	assert.Equal(t, emailConfig.Folders, loaded.EmailBillConfig.Folders)
+	assert.True(t, loaded.EmailBillConfig.Notification.Enabled)
+	assert.Equal(t, "always", loaded.EmailBillConfig.Notification.Mode)
+	assert.Equal(t, emailConfig.MailUser, loaded.EmailBillConfig.Notification.Recipient)
 
 	fileInfo, err := os.Stat(configPath)
 	require.NoError(t, err)

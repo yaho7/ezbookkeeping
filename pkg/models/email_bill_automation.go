@@ -354,6 +354,7 @@ type EmailBillTransactionImportIntent struct {
 
 // EmailBillTransactionImportAttempt is one immutable execution attempt.
 type EmailBillTransactionImportAttempt struct {
+	SyncTaskId        int64  `xorm:"INDEX"`
 	ImportAttemptId   int64  `xorm:"PK"`
 	ImportIntentId    int64  `xorm:"UNIQUE(UNQ_email_bill_import_attempt) INDEX NOT NULL"`
 	ImportRunId       int64  `xorm:"INDEX NOT NULL"`

@@ -4,6 +4,7 @@ type KnownTemplate string
 
 // Known templates
 const (
+	TEMPLATE_EMAIL_BILL_RESULT                       KnownTemplate = "email/email_bill_result"
 	TEMPLATE_VERIFY_EMAIL                            KnownTemplate = "email/verify_email"
 	TEMPLATE_PASSWORD_RESET                          KnownTemplate = "email/password_reset"
 	SYSTEM_PROMPT_TRANSACTION_TEXT_RECOGNITION       KnownTemplate = "prompt/transaction_text_recognition"

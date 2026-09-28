@@ -377,6 +377,8 @@ func startWebServer(c *core.CliContext) error {
 			apiV1Route.POST("/users/settings/email_bill/folders.json", bindApi(api.EmailBillSettings.FoldersHandler, config))
 			apiV1Route.POST("/users/settings/email_bill/run.json", bindApi(api.EmailBillSettings.RunHandler, config))
 			apiV1Route.GET("/users/settings/email_bill/status.json", bindApi(api.EmailBillSettings.StatusHandler, config))
+			apiV1Route.POST("/users/settings/email_bill/notification/preview.json", bindApi(api.EmailBillSettings.NotificationPreviewHandler, config))
+			apiV1Route.POST("/users/settings/email_bill/notification/test.json", bindApi(api.EmailBillSettings.NotificationTestHandler, config))
 			apiV1Route.GET("/email_bill/mailbox/list.json", bindApi(api.EmailBillAutomation.MailboxListHandler, config))
 			apiV1Route.GET("/email_bill/mailbox/detail.json", bindApi(api.EmailBillAutomation.MailboxDetailHandler, config))
 			apiV1Route.GET("/email_bill/parsers/list.json", bindApi(api.EmailBillAutomation.ParserRuleListHandler, config))

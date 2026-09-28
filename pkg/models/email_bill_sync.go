@@ -2,23 +2,27 @@ package models
 
 // EmailBillSyncTask persists the lifetime and progress of a background mailbox scan.
 type EmailBillSyncTask struct {
-	TaskId            int64  `xorm:"PK" json:"id,string"`
-	Uid               int64  `xorm:"INDEX NOT NULL" json:"-"`
-	TriggerType       string `xorm:"VARCHAR(24)" json:"trigger"`
-	Status            string `xorm:"VARCHAR(24) INDEX NOT NULL" json:"status"`
-	Stage             string `xorm:"VARCHAR(32)" json:"stage"`
-	CurrentFolder     string `xorm:"TEXT" json:"currentFolder"`
-	Scanned           int64  `json:"scanned"`
-	Downloaded        int64  `json:"downloaded"`
-	Processed         int64  `json:"processed"`
-	Resumed           int64  `json:"resumed"`
-	Skipped           int64  `json:"skipped"`
-	Failed            int64  `json:"failed"`
-	FoldersJson       string `xorm:"TEXT" json:"-"`
-	ErrorMessage      string `xorm:"TEXT" json:"errorMessage"`
-	StartedUnixTime   int64  `json:"startedUnixTime"`
-	UpdatedUnixTime   int64  `json:"updatedUnixTime"`
-	CompletedUnixTime int64  `json:"completedUnixTime"`
+	Imported                 int64  `json:"imported"`
+	NotificationStatus       string `xorm:"VARCHAR(24)" json:"notificationStatus"`
+	NotificationError        string `xorm:"TEXT" json:"notificationError"`
+	NotificationSentUnixTime int64  `json:"notificationSentUnixTime"`
+	TaskId                   int64  `xorm:"PK" json:"id,string"`
+	Uid                      int64  `xorm:"INDEX NOT NULL" json:"-"`
+	TriggerType              string `xorm:"VARCHAR(24)" json:"trigger"`
+	Status                   string `xorm:"VARCHAR(24) INDEX NOT NULL" json:"status"`
+	Stage                    string `xorm:"VARCHAR(32)" json:"stage"`
+	CurrentFolder            string `xorm:"TEXT" json:"currentFolder"`
+	Scanned                  int64  `json:"scanned"`
+	Downloaded               int64  `json:"downloaded"`
+	Processed                int64  `json:"processed"`
+	Resumed                  int64  `json:"resumed"`
+	Skipped                  int64  `json:"skipped"`
+	Failed                   int64  `json:"failed"`
+	FoldersJson              string `xorm:"TEXT" json:"-"`
+	ErrorMessage             string `xorm:"TEXT" json:"errorMessage"`
+	StartedUnixTime          int64  `json:"startedUnixTime"`
+	UpdatedUnixTime          int64  `json:"updatedUnixTime"`
+	CompletedUnixTime        int64  `json:"completedUnixTime"`
 }
 
 // EmailBillScanMessage is a metadata-only index. It does not claim an import

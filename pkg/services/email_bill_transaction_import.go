@@ -126,6 +126,7 @@ func (s *EmailBillTransactionImporter) startAttempt(c core.Context, database *da
 			return err
 		}
 		attempt = &models.EmailBillTransactionImportAttempt{
+			SyncTaskId:      emailBillTaskID(c),
 			ImportAttemptId: s.uuids.GenerateUuid(uuid.UUID_TYPE_EMAIL_BILL), ImportIntentId: intentID,
 			ImportRunId: runID, AttemptNumber: int32(count + 1), Status: "running", StartedUnixTime: time.Now().Unix(),
 		}

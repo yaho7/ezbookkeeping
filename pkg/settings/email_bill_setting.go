@@ -36,6 +36,17 @@ func SaveEmailBillConfiguration(configFilePath string, config *EmailBillConfig) 
 			"retain_raw_emails":        strconv.FormatBool(config.RetainRawEmails),
 			"raw_email_retention_days": strconv.FormatUint(uint64(config.RawEmailRetentionDays), 10),
 		}
+		if n := config.Notification; n != nil {
+			values["notification_enabled"] = strconv.FormatBool(n.Enabled)
+			values["notification_mode"] = n.Mode
+			values["notification_recipient"] = n.Recipient
+			values["notification_smtp_server"] = n.SMTPServer
+			values["notification_smtp_port"] = strconv.FormatUint(uint64(n.SMTPPort), 10)
+			values["notification_smtp_user"] = n.SMTPUser
+			values["notification_smtp_password"] = n.SMTPPassword
+			values["notification_from_address"] = n.FromAddress
+			values["notification_use_mailbox_credentials"] = strconv.FormatBool(n.UseMailboxCredentials)
+		}
 		for key, value := range values {
 			section.Key(key).SetValue(value)
 		}

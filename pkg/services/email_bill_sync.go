@@ -168,7 +168,7 @@ func (s *EmailBillSyncService) finishPendingMessages(c core.Context, uid, taskID
 func (s *EmailBillSyncService) run(task *models.EmailBillSyncTask, config *settings.EmailBillConfig) {
 	c := core.NewCronJobContext("EmailBillBackground", 0)
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
-	c.Context = ctx
+	c.Context = context.WithValue(ctx, emailBillTaskContextKey{}, task.TaskId)
 	defer cancel()
 	folders := make([]*EmailBillFolderProgress, 0)
 	var runErr error
@@ -196,13 +196,39 @@ func (s *EmailBillSyncService) run(task *models.EmailBillSyncTask, config *setti
 		if err := s.finishPendingMessages(finish, task.Uid, task.TaskId); err != nil && runErr == nil {
 			task.Status, task.ErrorMessage = "failed", sanitizeEmailTaskError(err.Error(), config)
 		}
+		task.NotificationStatus = "disabled"
+		imported, statsErr := EmailBillNotifications.ImportedCount(finish, task)
+		if statsErr == nil {
+			task.Imported = imported
+		} else {
+			log.Errorf(finish, "[email_bill_sync] cannot read task %d imported count: %s", task.TaskId, statsErr.Error())
+		}
+		if emailBillShouldNotify(task, config.Notification) {
+			task.NotificationStatus = "pending"
+			if statsErr != nil {
+				task.NotificationStatus, task.NotificationError = "failed", "Cannot read the notification summary"
+			}
+		} else if config.Notification != nil && config.Notification.Enabled {
+			task.NotificationStatus = "skipped"
+		}
 		if err := s.save(finish, task, folders); err != nil {
 			log.Errorf(finish, "[email_bill_sync] cannot save task %d outcome: %s", task.TaskId, sanitizeEmailTaskError(err.Error(), config))
+			task.NotificationStatus = "failed"
 		}
 		log.Infof(finish, "[email_bill_sync] task=%d status=%s scanned=%d processed=%d failed=%d error=%s", task.TaskId, task.Status, task.Scanned, task.Processed, task.Failed, task.ErrorMessage)
 		s.mu.Lock()
 		delete(s.active, task.Uid)
 		s.mu.Unlock()
+		if task.NotificationStatus == "pending" {
+			locale := "en"
+			if user, err := Users.GetUserById(finish, task.Uid); err == nil {
+				locale = user.Language
+			}
+			rootURL := settings.Container.GetCurrentConfig().RootUrl
+			if err := EmailBillNotifications.Notify(finish, task, config, rootURL, locale); err != nil {
+				log.Warnf(finish, "[email_bill_notification] task=%d delivery failed: %s", task.TaskId, sanitizeEmailTaskError(err.Error(), config))
+			}
+		}
 	}()
 	task.Status, task.Stage = "running", "connecting"
 	if runErr = s.save(c, task, folders); runErr != nil {
@@ -282,6 +308,9 @@ func findEmailBillFolder(folders *[]*EmailBillFolderProgress, name string) *Emai
 func sanitizeEmailTaskError(value string, config *settings.EmailBillConfig) string {
 	if config.MailPassword != "" {
 		value = strings.ReplaceAll(value, config.MailPassword, "[redacted]")
+	}
+	if config.Notification != nil && config.Notification.SMTPPassword != "" {
+		value = strings.ReplaceAll(value, config.Notification.SMTPPassword, "[redacted]")
 	}
 	return trimRunes(value, 2000)
 }
