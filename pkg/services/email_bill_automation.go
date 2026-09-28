@@ -313,3 +313,10 @@ func hashEmailBillValue(value []byte) string {
 	digest := sha256.Sum256(value)
 	return "sha256:" + hex.EncodeToString(digest[:])
 }
+
+// ListMessages returns recent user-owned mail samples for parser testing.
+func (s *EmailBillAutomationService) ListMessages(c core.Context, uid int64) ([]*models.EmailBillInboundMessage, error) {
+	var messages []*models.EmailBillInboundMessage
+	err := s.db.UserDataStore.Choose(uid).NewSession(c).Where("uid=?", uid).OrderBy("received_unix_time desc").Limit(50).Find(&messages)
+	return messages, err
+}

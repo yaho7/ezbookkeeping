@@ -4,9 +4,8 @@ import { defineStore } from 'pinia';
 import type {
     EmailBillSettings, EmailBillParserRule, EmailBillMessageSample,
     EmailBillParserPreview, EmailBillRoutingRule, EmailBillClassificationRule,
-    EmailBillCandidate, EmailBillAuditEvent, EmailBillGeneratedParser
+    EmailBillGeneratedParser
 } from '@/core/emailBill.ts';
-import { normalizeEmailBillCandidate } from '@/core/emailBill.ts';
 import services from '@/lib/services.ts';
 
 function resultOf<T>(response: { data: { success: boolean; result: T } }): T {
@@ -22,19 +21,17 @@ export const useEmailBillStore = defineStore('emailBill', () => {
     const messages = ref<EmailBillMessageSample[]>([]);
     const routes = ref<EmailBillRoutingRule[]>([]);
     const classifications = ref<EmailBillClassificationRule[]>([]);
-    const candidates = ref<EmailBillCandidate[]>([]);
 
     async function loadAll(): Promise<void> {
         const responses = await Promise.all([
             services.getEmailBillSettings(), services.listEmailBillParsers(), services.listEmailBillMessages(),
-            services.listEmailBillRoutes(), services.listEmailBillClassifications(), services.listEmailBillCandidates()
+            services.listEmailBillRoutes(), services.listEmailBillClassifications()
         ]);
         settings.value = resultOf(responses[0]);
         parsers.value = resultOf(responses[1]);
         messages.value = resultOf(responses[2]);
         routes.value = resultOf(responses[3]);
         classifications.value = resultOf(responses[4]);
-        candidates.value = resultOf(responses[5]).map(normalizeEmailBillCandidate);
     }
 
     async function saveSettings(value: EmailBillSettings): Promise<void> {
@@ -85,28 +82,9 @@ export const useEmailBillStore = defineStore('emailBill', () => {
         classifications.value = classifications.value.filter(item => item.id !== id);
     }
 
-    async function reloadCandidates(): Promise<void> {
-        candidates.value = resultOf(await services.listEmailBillCandidates()).map(normalizeEmailBillCandidate);
-    }
-
-    async function confirmCandidate(request: Record<string, string>): Promise<void> {
-        resultOf(await services.confirmEmailBillCandidate(request));
-        await reloadCandidates();
-    }
-
-    async function retryCandidate(candidateId: string): Promise<void> {
-        resultOf(await services.retryEmailBillCandidate(candidateId));
-        await reloadCandidates();
-    }
-
-    async function loadAudit(candidateId: string): Promise<EmailBillAuditEvent[]> {
-        return resultOf(await services.listEmailBillAudit(candidateId));
-    }
-
     return {
-        settings, parsers, messages, routes, classifications, candidates,
+        settings, parsers, messages, routes, classifications,
         loadAll, saveSettings, saveParser, testParser, generateParser, disableParser,
-        saveRoute, disableRoute, saveClassification, disableClassification, deleteClassification,
-        reloadCandidates, confirmCandidate, retryCandidate, loadAudit
+        saveRoute, disableRoute, saveClassification, disableClassification, deleteClassification
     };
 });

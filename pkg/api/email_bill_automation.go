@@ -16,11 +16,10 @@ import (
 // EmailBillAutomationApi exposes user-owned automation rules and dry runs.
 type EmailBillAutomationApi struct {
 	service *services.EmailBillAutomationService
-	review  *services.EmailBillReviewService
 }
 
 // EmailBillAutomation is the authenticated email automation API singleton.
-var EmailBillAutomation = &EmailBillAutomationApi{service: services.EmailBillAutomation, review: services.EmailBillReview}
+var EmailBillAutomation = &EmailBillAutomationApi{service: services.EmailBillAutomation}
 
 type emailBillParserRuleRequest struct {
 	ID         int64                   `json:"id,string"`
@@ -126,25 +125,6 @@ type emailBillClassificationRuleResponse struct {
 	CategoryID      string  `json:"categoryId"`
 	Confidence      float64 `json:"confidence"`
 	UpdatedUnixTime int64   `json:"updatedUnixTime"`
-}
-
-type emailBillCandidateConfirmRequest struct {
-	CandidateID int64 `json:"candidateId,string" binding:"required"`
-	VariantID   int64 `json:"variantId,string" binding:"required"`
-	AccountID   int64 `json:"accountId,string" binding:"required"`
-	CategoryID  int64 `json:"categoryId,string" binding:"required"`
-}
-
-type emailBillCandidateRetryRequest struct {
-	CandidateID int64 `json:"candidateId,string" binding:"required"`
-}
-
-type emailBillCandidateListRequest struct {
-	Status string `form:"status"`
-}
-
-type emailBillAuditListRequest struct {
-	CandidateID int64 `form:"candidate_id,string" binding:"required"`
 }
 
 // ParserRuleListHandler returns every parser and its current immutable version.
@@ -310,7 +290,7 @@ func (a *EmailBillAutomationApi) ClassificationRuleDisableHandler(c *core.WebCon
 	return true, nil
 }
 
-// ClassificationRuleDeleteHandler soft-deletes one user-owned mapping while preserving audit history.
+// ClassificationRuleDeleteHandler soft-deletes one user-owned mapping.
 func (a *EmailBillAutomationApi) ClassificationRuleDeleteHandler(c *core.WebContext) (any, *errs.Error) {
 	request := emailBillRuleIDRequest{}
 	if err := c.ShouldBindJSON(&request); err != nil {
@@ -324,7 +304,7 @@ func (a *EmailBillAutomationApi) ClassificationRuleDeleteHandler(c *core.WebCont
 
 // MessageListHandler returns recent stored messages that can be loaded into the test bench.
 func (a *EmailBillAutomationApi) MessageListHandler(c *core.WebContext) (any, *errs.Error) {
-	messages, err := a.review.ListMessages(c, c.GetCurrentUid())
+	messages, err := a.service.ListMessages(c, c.GetCurrentUid())
 	if err != nil {
 		return nil, errs.Or(err, errs.ErrOperationFailed)
 	}
@@ -334,89 +314,6 @@ func (a *EmailBillAutomationApi) MessageListHandler(c *core.WebContext) (any, *e
 			"id": strconv.FormatInt(message.MessageId, 10), "messageId": message.RemoteMessageId,
 			"sender": message.Sender, "subject": message.Subject, "receivedAt": time.Unix(message.ReceivedUnixTime, 0).Format(time.RFC3339),
 			"text": message.BodyContent, "bodySummary": message.BodySummary,
-		})
-	}
-	return responses, nil
-}
-
-// CandidateListHandler returns pending and historical candidates.
-func (a *EmailBillAutomationApi) CandidateListHandler(c *core.WebContext) (any, *errs.Error) {
-	request := emailBillCandidateListRequest{}
-	if err := c.ShouldBindQuery(&request); err != nil {
-		return nil, errs.NewIncompleteOrIncorrectSubmissionError(err)
-	}
-	infos, err := a.review.ListCandidates(c, c.GetCurrentUid(), request.Status)
-	if err != nil {
-		return nil, errs.Or(err, errs.ErrOperationFailed)
-	}
-	responses := make([]map[string]any, 0, len(infos))
-	for _, info := range infos {
-		variants := make([]map[string]any, 0, len(info.Variants))
-		for _, variant := range info.Variants {
-			variants = append(variants, map[string]any{
-				"id": strconv.FormatInt(variant.VariantId, 10), "amount": variant.Amount, "currency": variant.Currency,
-				"direction": variant.Direction, "merchant": variant.Merchant, "description": variant.Description,
-				"occurredAt": time.Unix(variant.TransactionUnixTime, 0).Format(time.RFC3339),
-				"bank":       variant.Bank, "kind": variant.CardType, "last4": variant.CardLast4,
-			})
-		}
-		accountID, categoryID := int64(0), int64(0)
-		if info.AccountDecision != nil {
-			accountID = info.AccountDecision.AccountId
-		}
-		if info.ClassificationDecision != nil {
-			categoryID = info.ClassificationDecision.CategoryId
-		}
-		responses = append(responses, map[string]any{
-			"id": strconv.FormatInt(info.Candidate.CandidateId, 10), "status": info.Candidate.Status,
-			"selectedVariantId": strconv.FormatInt(info.Candidate.SelectedVariantId, 10), "variants": variants,
-			"accountId": strconv.FormatInt(accountID, 10), "categoryId": strconv.FormatInt(categoryID, 10),
-			"transactionId": strconv.FormatInt(info.TransactionID, 10), "updatedUnixTime": info.Candidate.UpdatedUnixTime,
-		})
-	}
-	return responses, nil
-}
-
-// CandidateConfirmHandler applies a user correction and imports exactly once.
-func (a *EmailBillAutomationApi) CandidateConfirmHandler(c *core.WebContext) (any, *errs.Error) {
-	request := emailBillCandidateConfirmRequest{}
-	if err := c.ShouldBindJSON(&request); err != nil {
-		return nil, errs.NewIncompleteOrIncorrectSubmissionError(err)
-	}
-	transactionID, err := a.review.ConfirmCandidate(c, c.GetCurrentUid(), request.CandidateID, request.VariantID, request.AccountID, request.CategoryID)
-	if err != nil {
-		return nil, errs.Or(err, errs.ErrOperationFailed)
-	}
-	return map[string]string{"transactionId": strconv.FormatInt(transactionID, 10)}, nil
-}
-
-// CandidateRetryHandler resumes a failed or unresolved candidate.
-func (a *EmailBillAutomationApi) CandidateRetryHandler(c *core.WebContext) (any, *errs.Error) {
-	request := emailBillCandidateRetryRequest{}
-	if err := c.ShouldBindJSON(&request); err != nil {
-		return false, errs.NewIncompleteOrIncorrectSubmissionError(err)
-	}
-	if err := a.review.RetryCandidate(c, c.GetCurrentUid(), request.CandidateID); err != nil {
-		return false, errs.Or(err, errs.ErrOperationFailed)
-	}
-	return true, nil
-}
-
-// AuditListHandler returns the append-only audit chain for one owned candidate.
-func (a *EmailBillAutomationApi) AuditListHandler(c *core.WebContext) (any, *errs.Error) {
-	request := emailBillAuditListRequest{}
-	if err := c.ShouldBindQuery(&request); err != nil {
-		return nil, errs.NewIncompleteOrIncorrectSubmissionError(err)
-	}
-	events, err := a.review.ListAudit(c, c.GetCurrentUid(), request.CandidateID)
-	if err != nil {
-		return nil, errs.Or(err, errs.ErrOperationFailed)
-	}
-	responses := make([]map[string]any, 0, len(events))
-	for _, event := range events {
-		responses = append(responses, map[string]any{
-			"id": strconv.FormatInt(event.AuditEventId, 10), "eventType": event.EventType,
-			"actorType": event.ActorType, "payload": json.RawMessage(event.PayloadJson), "createdUnixTime": event.CreatedUnixTime,
 		})
 	}
 	return responses, nil

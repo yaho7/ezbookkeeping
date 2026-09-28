@@ -16,9 +16,7 @@ import type {
     EmailBillParserPreview,
     EmailBillGeneratedParser,
     EmailBillRoutingRule,
-    EmailBillClassificationRule,
-    EmailBillCandidate,
-    EmailBillAuditEvent
+    EmailBillClassificationRule
 } from '@/core/emailBill.ts';
 import type { LLMSettings } from '@/core/llm.ts';
 import type {
@@ -532,18 +530,6 @@ export default {
     },
     deleteEmailBillClassification: (id: string): ApiResponsePromise<boolean> => {
         return axios.post<ApiResponse<boolean>>('v1/email_bill/classification/delete.json', { id });
-    },
-    listEmailBillCandidates: (status = ''): ApiResponsePromise<EmailBillCandidate[]> => {
-        return axios.get<ApiResponse<EmailBillCandidate[]>>('v1/email_bill/candidates/list.json' + (status ? `?status=${encodeURIComponent(status)}` : ''));
-    },
-    confirmEmailBillCandidate: (req: Record<string, string>): ApiResponsePromise<{ transactionId: string }> => {
-        return axios.post<ApiResponse<{ transactionId: string }>>('v1/email_bill/candidates/confirm.json', req);
-    },
-    retryEmailBillCandidate: (candidateId: string): ApiResponsePromise<boolean> => {
-        return axios.post<ApiResponse<boolean>>('v1/email_bill/candidates/retry.json', { candidateId });
-    },
-    listEmailBillAudit: (candidateId: string): ApiResponsePromise<EmailBillAuditEvent[]> => {
-        return axios.get<ApiResponse<EmailBillAuditEvent[]>>(`v1/email_bill/audit/list.json?candidate_id=${encodeURIComponent(candidateId)}`);
     },
     get2FAStatus: (): ApiResponsePromise<TwoFactorStatusResponse> => {
         return axios.get<ApiResponse<TwoFactorStatusResponse>>('v1/users/2fa/status.json');

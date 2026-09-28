@@ -85,9 +85,7 @@ func (r *EmailBillAutomationRepository) SaveMessageAndStartRun(c core.Context, i
 		if _, insertErr := sess.Insert(event); insertErr != nil {
 			return insertErr
 		}
-		return r.insertAuditEvent(sess, input.UID, message.MessageId, 0, run.ImportRunId, "message_received", "system", map[string]any{
-			"fingerprintVersion": input.FingerprintVersion,
-		})
+		return nil
 	})
 	if err != nil {
 		// A concurrent worker may have claimed the same unique identity.
@@ -129,9 +127,7 @@ func (r *EmailBillAutomationRepository) SaveParserRun(c core.Context, input Emai
 			}
 			outputs[index] = EmailBillSavedOutput{OutputID: output.ParserOutputId, Bill: bill}
 		}
-		return r.insertAuditEvent(sess, input.UID, 0, 0, input.RunID, "parser_finished", "parser", map[string]any{
-			"parserVersionId": input.ParserVersionID, "status": input.Status, "outputCount": len(input.Bills),
-		})
+		return nil
 	})
 	return outputs, err
 }
@@ -191,11 +187,6 @@ func (r *EmailBillAutomationRepository) SaveCandidates(c core.Context, uid, runI
 			if _, err = sess.ID(candidate.CandidateId).Cols("status", "selected_variant_id", "updated_unix_time").Update(candidate); err != nil {
 				return err
 			}
-			if err := r.insertAuditEvent(sess, uid, run.MessageId, candidate.CandidateId, runID, "candidate_aggregated", "system", map[string]any{
-				"messageFingerprint": messageFingerprint, "variantCount": len(variantIDs), "status": status,
-			}); err != nil {
-				return err
-			}
 		}
 		return nil
 	})
@@ -226,7 +217,7 @@ func (r *EmailBillAutomationRepository) FinishRun(c core.Context, uid, runID int
 		if _, err = sess.Insert(event); err != nil {
 			return err
 		}
-		return r.insertAuditEvent(sess, uid, run.MessageId, 0, runID, "run_finished", "system", map[string]any{"status": status, "reason": reason})
+		return nil
 	})
 }
 
@@ -295,20 +286,6 @@ func (r *EmailBillAutomationRepository) ensureConflict(sess *xorm.Session, candi
 		}
 	}
 	return nil
-}
-
-func (r *EmailBillAutomationRepository) insertAuditEvent(sess *xorm.Session, uid, messageID, candidateID, runID int64, eventType, actorType string, payload any) error {
-	raw, err := json.Marshal(payload)
-	if err != nil {
-		return err
-	}
-	event := &models.EmailBillAuditEvent{
-		AuditEventId: r.GenerateUuid(uuid.UUID_TYPE_EMAIL_BILL), Uid: uid, MessageId: messageID,
-		CandidateId: candidateID, ImportRunId: runID, EventType: eventType, ActorType: actorType,
-		PayloadJson: string(raw), CreatedUnixTime: time.Now().Unix(),
-	}
-	_, err = sess.Insert(event)
-	return err
 }
 
 func parserOutputModel(id, parserRunID int64, sequence int32, bill emailbill.StandardBill, raw string, now int64) *models.EmailBillParserOutput {

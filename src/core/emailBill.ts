@@ -92,7 +92,7 @@ export interface EmailBillMailboxDetail {
     receivedAt?: string;
     runStatus?: string;
     parsers: Array<{ name: string; version: number; status: string; matched: boolean; outputs: number; errorMessage: string; durationMillis: number }>;
-    candidates: Array<{ id: string; status: string; amount: number; currency: string; merchant: string }>;
+    candidates: Array<{ id: string; status: string; amount: number; currency: string; merchant: string; accountName: string; categoryName: string; reason: string }>;
 }
 
 export interface EmailBillParserPreview {
@@ -147,38 +147,6 @@ export interface EmailBillClassificationRule {
     updatedUnixTime: number;
 }
 
-export interface EmailBillCandidateVariant {
-    id: string;
-    amount: number;
-    currency: string;
-    direction: string;
-    merchant: string;
-    description: string;
-    occurredAt: string;
-    bank: string;
-    kind: string;
-    last4: string;
-}
-
-export interface EmailBillCandidate {
-    id: string;
-    status: string;
-    selectedVariantId: string;
-    variants: EmailBillCandidateVariant[];
-    accountId: string;
-    categoryId: string;
-    transactionId: string;
-    updatedUnixTime: number;
-}
-
-export interface EmailBillAuditEvent {
-    id: string;
-    eventType: string;
-    actorType: string;
-    payload: Record<string, unknown>;
-    createdUnixTime: number;
-}
-
 export type EmailBillScheduleMode = 'daily' | 'weekly' | 'advanced';
 
 export interface EmailBillSchedule {
@@ -194,16 +162,6 @@ export function createEmailBillParserRule(): EmailBillParserRule {
         matcher: { senders: [], subjectContains: [] },
         sourceCode: 'def parse(mail):\n    return []',
         runtimeVersion: 'starlark-v1', createdBy: 'user', updatedUnixTime: 0
-    };
-}
-
-export function normalizeEmailBillCandidate(candidate: Partial<EmailBillCandidate>): EmailBillCandidate {
-    return {
-        id: String(candidate.id || ''), status: String(candidate.status || ''),
-        selectedVariantId: String(candidate.selectedVariantId || '0'),
-        variants: candidate.variants || [], accountId: String(candidate.accountId || '0'),
-        categoryId: String(candidate.categoryId || '0'), transactionId: String(candidate.transactionId || '0'),
-        updatedUnixTime: Number(candidate.updatedUnixTime || 0)
     };
 }
 

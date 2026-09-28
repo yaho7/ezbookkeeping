@@ -127,7 +127,7 @@ func (s *EmailBillFinalizer) finalizeCandidate(c core.Context, uid, mailboxID, r
 			}
 		}
 		if strings.HasPrefix(classification.Source, "llm_") || classification.Source == "fallback" {
-			llmRunID, err = s.persistLLMRun(c, uid, runID, candidate.CandidateId, categoryType, classification, options)
+			llmRunID, err = s.persistLLMRun(c, uid, runID, candidate.CandidateId, classification, options)
 			if err != nil {
 				return err
 			}
@@ -200,9 +200,7 @@ func (s *EmailBillFinalizer) persistAccountDecision(c core.Context, uid, runID i
 		if err != nil {
 			return err
 		}
-		return EmailBillAutomationStore.insertAuditEvent(sess, uid, candidate.MessageId, candidate.CandidateId, runID, "account_routed", decisionType, map[string]any{
-			"decisionId": model.AccountDecisionId, "ruleVersionId": decision.RuleID, "accountId": decision.AccountID, "status": status,
-		})
+		return nil
 	})
 }
 
@@ -225,14 +223,11 @@ func (s *EmailBillFinalizer) persistClassificationDecision(c core.Context, uid, 
 		if err != nil {
 			return err
 		}
-		return EmailBillAutomationStore.insertAuditEvent(sess, uid, candidate.MessageId, candidate.CandidateId, runID, "category_classified", decision.Source, map[string]any{
-			"decisionId": model.ClassificationDecisionId, "ruleVersionId": decision.RuleVersionID,
-			"llmRunId": llmRunID, "categoryId": decision.CategoryID, "status": status,
-		})
+		return nil
 	})
 }
 
-func (s *EmailBillFinalizer) persistLLMRun(c core.Context, uid, runID, candidateID int64, categoryType models.TransactionCategoryType, decision EmailBillClassificationResult, categories []EmailBillCategoryOption) (int64, error) {
+func (s *EmailBillFinalizer) persistLLMRun(c core.Context, uid, runID, candidateID int64, decision EmailBillClassificationResult, categories []EmailBillCategoryOption) (int64, error) {
 	snapshot, _ := json.Marshal(categories)
 	model := &models.EmailBillLLMClassificationRun{
 		LLMRunId: s.uuids.GenerateUuid(uuid.UUID_TYPE_EMAIL_BILL), CandidateId: candidateID, ImportRunId: runID,
@@ -244,21 +239,6 @@ func (s *EmailBillFinalizer) persistLLMRun(c core.Context, uid, runID, candidate
 	err := s.db.UserDataStore.Choose(uid).DoTransaction(c, func(sess *xorm.Session) error {
 		if _, err := sess.Insert(model); err != nil {
 			return err
-		}
-		if strings.TrimSpace(decision.ProposedCategoryName) != "" {
-			status := "pending"
-			if decision.CategoryID > 0 {
-				status = "created"
-			}
-			proposal := &models.EmailBillCategoryCreationProposal{
-				ProposalId: s.uuids.GenerateUuid(uuid.UUID_TYPE_EMAIL_BILL), CandidateId: candidateID,
-				ImportRunId: runID, LLMRunId: model.LLMRunId, ProposedName: decision.ProposedCategoryName,
-				CategoryType: categoryType, Confidence: decision.Confidence,
-				Status: status, CreatedCategoryId: decision.CategoryID, CreatedUnixTime: time.Now().Unix(),
-			}
-			if _, err := sess.Insert(proposal); err != nil {
-				return err
-			}
 		}
 		return nil
 	})

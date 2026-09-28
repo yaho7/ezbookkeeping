@@ -165,7 +165,7 @@ func TestEmailBillFinalizerCallsAIWhenDefaultAccountPreparationFails(t *testing.
 		new(models.EmailBillClassificationRule), new(models.EmailBillClassificationRuleVersion),
 		new(models.EmailBillCandidate), new(models.EmailBillCandidateVariant), new(models.TransactionCategory),
 		new(models.EmailBillAccountRoutingDecision), new(models.EmailBillClassificationDecision),
-		new(models.EmailBillLLMClassificationRun), new(models.EmailBillAuditEvent))
+		new(models.EmailBillLLMClassificationRun))
 	c := core.NewNullContext()
 	candidate := &models.EmailBillCandidate{CandidateId: 30, Uid: 7, MessageId: 20, SelectedVariantId: 40, Status: "awaiting_account"}
 	_, err := s.UserDataDB(7).NewSession(c).Insert(candidate,

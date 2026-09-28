@@ -133,8 +133,52 @@ func (s *EmailBillSyncService) MessageDetail(c core.Context, uid, id int64) (map
 				return nil, err
 			}
 		}
+		reason, categoryName, accountName := "", "", ""
+		if bill.SelectedVariantId == 0 {
+			reason = "Conflicting parser results; this bill was not imported."
+		}
+		if bill.CurrentAccountDecisionId > 0 {
+			decision := &models.EmailBillAccountRoutingDecision{}
+			if _, err = db.NewSession(c).Where("account_decision_id=? AND candidate_id=?", bill.CurrentAccountDecisionId, bill.CandidateId).Get(decision); err != nil {
+				return nil, err
+			}
+			account := &models.Account{}
+			if _, err = db.NewSession(c).Where("uid=? AND account_id=?", uid, decision.AccountId).Get(account); err != nil {
+				return nil, err
+			}
+			accountName = account.Name
+			if bill.Status == "awaiting_account" {
+				reason = decision.Reason
+			}
+		}
+		if bill.CurrentClassificationDecisionId > 0 {
+			decision := &models.EmailBillClassificationDecision{}
+			if _, err = db.NewSession(c).Where("classification_decision_id=? AND candidate_id=?", bill.CurrentClassificationDecisionId, bill.CandidateId).Get(decision); err != nil {
+				return nil, err
+			}
+			category := &models.TransactionCategory{}
+			if _, err = db.NewSession(c).Where("uid=? AND category_id=?", uid, decision.CategoryId).Get(category); err != nil {
+				return nil, err
+			}
+			categoryName = category.Name
+			if bill.Status != "awaiting_account" {
+				reason = decision.Reason
+			}
+		}
+		if bill.Status == "import_failed" {
+			intent := &models.EmailBillTransactionImportIntent{}
+			if _, err = db.NewSession(c).Where("candidate_id=?", bill.CandidateId).Get(intent); err != nil {
+				return nil, err
+			}
+			attempt := &models.EmailBillTransactionImportAttempt{}
+			if _, err = db.NewSession(c).Where("import_intent_id=?", intent.ImportIntentId).OrderBy("attempt_number desc").Get(attempt); err != nil {
+				return nil, err
+			}
+			reason = attempt.ErrorMessage
+		}
 		candidates = append(candidates, map[string]any{"id": strconv.FormatInt(bill.CandidateId, 10), "status": bill.Status,
-			"amount": variant.Amount, "currency": variant.Currency, "merchant": variant.Merchant})
+			"amount": variant.Amount, "currency": variant.Currency, "merchant": variant.Merchant,
+			"accountName": accountName, "categoryName": categoryName, "reason": reason})
 	}
 	result["parsers"], result["candidates"] = parsers, candidates
 	return result, nil

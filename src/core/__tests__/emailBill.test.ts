@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { emailBillRuleSavePayload, buildEmailBillSchedule, createEmailBillParserRule, normalizeEmailBillCandidate, parseEmailBillSchedule } from '@/core/emailBill.ts';
+import { emailBillRuleSavePayload, buildEmailBillSchedule, createEmailBillParserRule, parseEmailBillSchedule } from '@/core/emailBill.ts';
 
 describe('email bill settings models', () => {
     it('creates an enabled bounded parser draft', () => {
@@ -9,13 +9,6 @@ describe('email bill settings models', () => {
         expect(rule.enabled).toBe(true);
         expect(rule.matcher.senders).toEqual([]);
         expect(rule.sourceCode).toContain('def parse(mail):');
-    });
-
-    it('keeps large candidate ids as strings', () => {
-        const candidate = normalizeEmailBillCandidate({ id: '9007199254740993', variants: [] });
-
-        expect(candidate.id).toBe('9007199254740993');
-        expect(candidate.selectedVariantId).toBe('0');
     });
 
     it('round-trips daily and weekly schedules', () => {

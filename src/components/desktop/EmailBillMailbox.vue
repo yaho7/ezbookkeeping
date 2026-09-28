@@ -72,7 +72,8 @@
                         <p v-if="parser.errorMessage" class="text-body-2 text-error mt-2">{{ parser.errorMessage }}</p>
                     </div>
                     <div v-for="candidate in detail.candidates" :key="candidate.id" class="mail-evidence pa-3 mb-2 d-flex flex-wrap align-center ga-2">
-                        <span>{{ candidate.merchant || tt('Unknown') }}</span><span v-if="candidate.currency" class="text-body-2">{{ (Math.abs(candidate.amount) / 100).toFixed(2) }} {{ candidate.currency }}</span><v-chip size="small" :color="statusColor(candidate.status)">{{ messageStatus(candidate.status) }}</v-chip><v-spacer /><v-btn size="small" variant="text" @click="emit('review')">{{ tt('Review & Audit') }}</v-btn>
+                        <span>{{ candidate.merchant || tt('Unknown') }}</span><span v-if="candidate.currency" class="text-body-2">{{ (Math.abs(candidate.amount) / 100).toFixed(2) }} {{ candidate.currency }}</span><v-chip size="small" :color="statusColor(candidate.status)">{{ messageStatus(candidate.status) }}</v-chip><span v-if="candidate.categoryName" class="text-body-2 text-medium-emphasis">{{ candidate.accountName }} · {{ candidate.categoryName }}</span>
+                        <p v-if="candidate.reason" class="text-caption text-medium-emphasis w-100 mb-0">{{ tt(candidate.reason) }}</p>
                     </div>
                     <v-divider class="my-5" />
                     <div class="d-flex align-center flex-wrap ga-2 mb-3"><h3 class="text-subtitle-1">{{ tt('Email Body') }}</h3><v-spacer /><v-btn size="small" variant="text" :disabled="!detail.text" @click="emit('test', detail)">{{ tt('Open in Test Bench') }}</v-btn></div>
@@ -93,7 +94,7 @@ import { useI18n } from '@/locales/helpers.ts';
 import services from '@/lib/services.ts';
 import type { EmailBillMailboxDetail, EmailBillScanMessage, EmailBillSyncTask } from '@/core/emailBill.ts';
 
-const emit = defineEmits<{ active: [value: boolean]; review: []; test: [detail: EmailBillMailboxDetail] }>();
+const emit = defineEmits<{ active: [value: boolean]; test: [detail: EmailBillMailboxDetail] }>();
 const { tt } = useI18n();
 const task = ref<EmailBillSyncTask | null>(null);
 const messages = ref<EmailBillScanMessage[]>([]);

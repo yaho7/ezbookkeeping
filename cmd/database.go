@@ -205,13 +205,10 @@ func updateAllDatabaseTablesStructure(c *core.CliContext) error {
 		new(models.EmailBillClassificationRule),
 		new(models.EmailBillClassificationRuleVersion),
 		new(models.EmailBillLLMClassificationRun),
-		new(models.EmailBillCategoryCreationProposal),
 		new(models.EmailBillCategoryCreationClaim),
 		new(models.EmailBillClassificationDecision),
-		new(models.EmailBillConfirmationAction),
 		new(models.EmailBillTransactionImportIntent),
 		new(models.EmailBillTransactionImportAttempt),
-		new(models.EmailBillAuditEvent),
 	)
 
 	if err != nil {

@@ -3053,5 +3053,10 @@
     "AI Text Settings": "AI Text Settings",
     "AI settings are managed by deployment environment variables.": "AI settings are managed by deployment environment variables.",
     "Global AI settings can only be changed by the configured settings operator.": "Global AI settings can only be changed by the configured settings operator.",
-    "Delete saved API key (disable this provider if a key is required)": "Delete saved API key (disable this provider if a key is required)"
+    "Delete saved API key (disable this provider if a key is required)": "Delete saved API key (disable this provider if a key is required)",
+    "Read emails, classify bills with AI, and record them automatically.": "Read emails, classify bills with AI, and record them automatically.",
+    "Advanced Options": "Advanced Options",
+    "Edit Parser Code and Conditions": "Edit Parser Code and Conditions",
+    "Conflicting parser results; this bill was not imported.": "Conflicting parser results; this bill was not imported.",
+    "LLM confidence is below the automatic classification threshold": "LLM confidence is below the automatic classification threshold"
 }

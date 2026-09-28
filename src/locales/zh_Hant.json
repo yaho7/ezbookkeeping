@@ -2954,5 +2954,10 @@
     "AI Text Settings": "AI 文字設定",
     "AI settings are managed by deployment environment variables.": "AI 設定由部署環境變數管理，請在部署設定中修改。",
     "Global AI settings can only be changed by the configured settings operator.": "僅部署設定中指定的管理使用者可以修改全域 AI 設定。",
-    "Delete saved API key (disable this provider if a key is required)": "刪除已儲存的 API 金鑰（若服務需要金鑰，請同時停用）"
+    "Delete saved API key (disable this provider if a key is required)": "刪除已儲存的 API 金鑰（若服務需要金鑰，請同時停用）",
+    "Read emails, classify bills with AI, and record them automatically.": "讀取郵件、AI 分類並自動記帳。",
+    "Advanced Options": "進階選項",
+    "Edit Parser Code and Conditions": "編輯解析程式碼與比對條件",
+    "Conflicting parser results; this bill was not imported.": "解析結果存在衝突，此帳單未入帳。",
+    "LLM confidence is below the automatic classification threshold": "AI 分類可信度不足，已記入未分類。"
 }

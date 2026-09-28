@@ -76,7 +76,7 @@ Visit [Docker Hub](https://hub.docker.com/r/mayswind/ezbookkeeping) to see all i
 
 ### Docker Compose with Email Bill Automation
 
-This fork runs configurable email-to-transaction automation directly inside ezBookkeeping. Mailbox settings, sandboxed parser code, account routes, editable classification learning and audit history are managed in **Settings → Email Bill Automation**; there is no sidecar importer or second image.
+This fork runs configurable email-to-transaction automation directly inside ezBookkeeping. The email workspace, mailbox settings and parser rules are managed in **Settings → Email Bill Automation**; there is no sidecar importer or second image.
 
 See [Email Bill Automation](docs/email-bill-importer.md) for setup, then start the single service with:
 

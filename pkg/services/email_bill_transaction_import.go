@@ -2,7 +2,6 @@ package services
 
 import (
 	"crypto/sha256"
-	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
@@ -82,17 +81,7 @@ func (s *EmailBillTransactionImporter) Import(c core.Context, uid, runID, candid
 		}); err != nil {
 			return err
 		}
-		payload, _ := json.Marshal(map[string]string{
-			"transactionId": fmt.Sprintf("%d", transaction.TransactionId),
-			"accountId":     fmt.Sprintf("%d", accountID), "categoryId": fmt.Sprintf("%d", categoryID),
-		})
-		audit := &models.EmailBillAuditEvent{
-			AuditEventId: s.uuids.GenerateUuid(uuid.UUID_TYPE_EMAIL_BILL), Uid: uid, CandidateId: candidateID,
-			ImportRunId: runID, EventType: "transaction_created", ActorType: "system",
-			PayloadJson: string(payload), CreatedUnixTime: now,
-		}
-		_, err = sess.Insert(audit)
-		return err
+		return nil
 	})
 	if err != nil {
 		_ = s.markFailed(c, database, intent.ImportIntentId, attempt.ImportAttemptId, err)
