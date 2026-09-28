@@ -86,6 +86,28 @@ func TestCMBDebitParserParsesMultilineIncomePrefix(t *testing.T) {
 	assert.Equal(t, "工资", transactions[0].Merchant)
 }
 
+func TestCMBDebitParserParsesApplePayAndUnionPayNotifications(t *testing.T) {
+	for _, item := range []struct {
+		name, body, merchant string
+		amount               int64
+	}{
+		{"Apple Pay", "您账户1234（设备卡号5678）于07月22日17:18线上免密支付人民币20.00，余额385.92，Apple Pay, 线上支付消费，示例公交有限公司(公交出行）", "示例公交有限公司(公交出行）", -2000},
+		{"UnionPay", "您账户1234于07月02日19:47银联扣款人民币14.60元，余额1234.62元（银联在线支付，（特约）示例商户）", "示例商户", -1460},
+	} {
+		t.Run(item.name, func(t *testing.T) {
+			receivedAt := time.Date(2026, 7, 23, 20, 0, 0, 0, testLocation(t))
+			bills, err := NewCMBDebitParser().Parse(item.body, receivedAt)
+			require.NoError(t, err)
+			require.Len(t, bills, 1)
+			assert.Equal(t, item.amount, bills[0].AmountMinor)
+			assert.Equal(t, item.merchant, bills[0].Merchant)
+			assert.Equal(t, SourceCMBDebit, bills[0].Source)
+			assert.Equal(t, 2026, bills[0].OccurredAt.Year())
+			assert.Equal(t, time.July, bills[0].OccurredAt.Month())
+		})
+	}
+}
+
 func TestCMBDebitParserUsesPreviousYearForDecemberMailReceivedInJanuary(t *testing.T) {
 	parser := NewCMBDebitParser()
 	receivedAt := time.Date(2027, 1, 1, 1, 0, 0, 0, testLocation(t))

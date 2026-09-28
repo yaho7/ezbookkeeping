@@ -104,6 +104,14 @@ type cmbDebitParser struct {
 func NewCMBDebitParser() Parser {
 	return &cmbDebitParser{rules: []debitRule{
 		{
+			pattern:   regexp.MustCompile(`于(\d{2}月\d{2}日)(\d{2}:\d{2})线上免密支付(?:人民币)?(\d+(?:\.\d+)?)(?:元)?[，,]余额[^，,。；\r\n]+[，,][ \t]*(?:Apple Pay[，,][ \t]*)?(?:线上支付消费[，,][ \t]*)?([^。；\r\n]+)`),
+			dateGroup: 1, timeGroup: 2, amountGroup: 3, merchantGroup: 4, sign: -1, label: "支出",
+		},
+		{
+			pattern:   regexp.MustCompile(`于(\d{2}月\d{2}日)(\d{2}:\d{2})银联扣款(?:人民币)?(\d+(?:\.\d+)?)元[，,]余额[^（(\r\n]+[（(]银联在线支付[，,][ \t]*[（(]特约[）)][ \t]*([^）)\r\n]+)[）)]`),
+			dateGroup: 1, timeGroup: 2, amountGroup: 3, merchantGroup: 4, sign: -1, label: "支出",
+		},
+		{
 			pattern:   regexp.MustCompile(`(?s)于(\d{2}月\d{2}日)(\d{2}:\d{2}).*?在(.*?)(?:快捷支付|支付|消费)(?:人民币)?(\d+(?:\.\d+)?)元`),
 			dateGroup: 1, timeGroup: 2, merchantGroup: 3, amountGroup: 4, sign: -1, label: "支出",
 		},
