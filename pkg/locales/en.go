@@ -6,8 +6,10 @@ import (
 
 var en = &LocaleTextItems{
 	GlobalTextItems: &GlobalTextItems{
-		AppName:                     "ezBookkeeping",
-		DefaultEmailBillAccountName: "Default bookkeeping account",
+		AppName:                            "ezBookkeeping",
+		DefaultEmailBillAccountName:        "Default bookkeeping account",
+		DefaultEmailBillCategoryParentName: "Email bills",
+		UncategorizedEmailBillCategoryName: "Uncategorized",
 	},
 	DefaultTypes: &DefaultTypes{
 		DecimalSeparator:    core.DECIMAL_SEPARATOR_DOT,

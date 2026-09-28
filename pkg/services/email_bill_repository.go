@@ -178,7 +178,7 @@ func (r *EmailBillAutomationRepository) SaveCandidates(c core.Context, uid, runI
 			status := "awaiting_routing"
 			selectedVariantID := int64(0)
 			if aggregated.Conflicted {
-				status = "awaiting_confirmation"
+				status = "conflict"
 				if err := r.ensureConflict(sess, candidate.CandidateId, variantIDs, now); err != nil {
 					return err
 				}

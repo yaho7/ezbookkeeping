@@ -61,7 +61,7 @@ func TestEmailBillClassifierRejectsUnknownLLMCategory(t *testing.T) {
 	decision, err := classifier.Classify(core.NewNullContext(), 7, emailbill.StandardBill{Merchant: "Cafe"}, 2, nil, []EmailBillCategoryOption{{ID: 12, Name: "Dining"}})
 	require.NoError(t, err)
 
-	assert.Equal(t, "awaiting_confirmation", decision.Source)
+	assert.Equal(t, "fallback", decision.Source)
 	assert.Zero(t, decision.CategoryID)
 }
 
@@ -72,6 +72,6 @@ func TestEmailBillClassifierKeepsLowConfidenceNewCategoryAsProposal(t *testing.T
 	decision, err := classifier.Classify(core.NewNullContext(), 7, emailbill.StandardBill{Merchant: "Rare Shop"}, 2, nil, nil)
 	require.NoError(t, err)
 
-	assert.Equal(t, "awaiting_confirmation", decision.Source)
+	assert.Equal(t, "fallback", decision.Source)
 	assert.Equal(t, "Specialty", decision.ProposedCategoryName)
 }

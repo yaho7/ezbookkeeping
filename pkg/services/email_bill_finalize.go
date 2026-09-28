@@ -12,6 +12,7 @@ import (
 	"github.com/mayswind/ezbookkeeping/pkg/core"
 	"github.com/mayswind/ezbookkeeping/pkg/datastore"
 	"github.com/mayswind/ezbookkeeping/pkg/emailbill"
+	"github.com/mayswind/ezbookkeeping/pkg/locales"
 	"github.com/mayswind/ezbookkeeping/pkg/models"
 	"github.com/mayswind/ezbookkeeping/pkg/uuid"
 )
@@ -46,7 +47,7 @@ func (s *EmailBillFinalizer) FinalizeMessage(c core.Context, uid, mailboxID, mes
 	}
 	var failures []error
 	for _, candidate := range candidates {
-		if candidate.SelectedVariantId <= 0 || candidate.Status == "awaiting_confirmation" || candidate.Status == "imported" {
+		if candidate.SelectedVariantId <= 0 || candidate.Status == "imported" {
 			continue
 		}
 		if err := s.finalizeCandidate(c, uid, mailboxID, runID, candidate); err != nil {
@@ -98,9 +99,15 @@ func (s *EmailBillFinalizer) finalizeCandidate(c core.Context, uid, mailboxID, r
 	if err != nil {
 		return err
 	}
-	options := make([]EmailBillCategoryOption, 0, len(categories))
-	for _, category := range categories {
-		options = append(options, EmailBillCategoryOption{ID: category.CategoryId, Name: category.Name})
+	options := emailBillUsableCategoryOptions(categories)
+	validCategories := make(map[int64]bool, len(options))
+	for _, option := range options {
+		validCategories[option.ID] = true
+	}
+	for index := range classificationRules {
+		if !validCategories[classificationRules[index].CategoryID] {
+			classificationRules[index].Enabled = false
+		}
 	}
 	classification, llmRunID, reused, err := s.classificationForAccountRetry(c, uid, candidate, options)
 	if err != nil {
@@ -109,17 +116,17 @@ func (s *EmailBillFinalizer) finalizeCandidate(c core.Context, uid, mailboxID, r
 	if !reused {
 		classification, err = s.classifier.Classify(c, uid, bill, accountDecision.AccountID, classificationRules, options)
 		if err != nil {
-			return errors.Join(accountErr, s.persistClassificationDecision(c, uid, runID, candidate,
-				EmailBillClassificationResult{Source: "awaiting_confirmation", Reason: err.Error()}, 0, routed))
+			classification = EmailBillClassificationResult{Source: "fallback", Reason: err.Error()}
 		}
 		if classification.Source == "llm_new" {
 			classification.CategoryID, err = s.createClaimedCategory(c, uid, categoryType, classification.ProposedCategoryName)
 			if err != nil {
-				classification.Source = "awaiting_confirmation"
+				classification.CategoryID = 0
+				classification.Source = "fallback"
 				classification.Reason = err.Error()
 			}
 		}
-		if strings.HasPrefix(classification.Source, "llm_") || classification.Source == "awaiting_confirmation" {
+		if strings.HasPrefix(classification.Source, "llm_") || classification.Source == "fallback" {
 			llmRunID, err = s.persistLLMRun(c, uid, runID, candidate.CandidateId, categoryType, classification, options)
 			if err != nil {
 				return err
@@ -132,9 +139,26 @@ func (s *EmailBillFinalizer) finalizeCandidate(c core.Context, uid, mailboxID, r
 				FlowType: bill.FlowType, CategoryID: classification.CategoryID, Confidence: classification.Confidence,
 			})
 			if learnErr != nil {
-				return learnErr
+				classification.Reason += "; save merchant mapping: " + learnErr.Error()
+			} else {
+				classification.RuleVersionID = learned.Version.ClassificationRuleVersionId
 			}
-			classification.RuleVersionID = learned.Version.ClassificationRuleVersionId
+		}
+	}
+	if classification.CategoryID <= 0 {
+		user, userErr := Users.GetUserById(c, uid)
+		if userErr != nil {
+			return userErr
+		}
+		name := locales.GetLocaleTextItems(user.Language).GlobalTextItems.UncategorizedEmailBillCategoryName
+		if name == "" {
+			name = "Uncategorized"
+		}
+		classification.CategoryID, err = s.createClaimedCategory(c, uid, categoryType, name)
+		classification.Source = "fallback"
+		if err != nil {
+			classification.Reason = err.Error()
+			return errors.Join(err, s.persistClassificationDecision(c, uid, runID, candidate, classification, llmRunID, routed))
 		}
 	}
 	if err = s.persistClassificationDecision(c, uid, runID, candidate, classification, llmRunID, routed); err != nil {
@@ -241,62 +265,110 @@ func (s *EmailBillFinalizer) persistLLMRun(c core.Context, uid, runID, candidate
 	return model.LLMRunId, err
 }
 
+// Only visible secondary categories with a visible parent can be used by native transactions.
+func emailBillUsableCategoryOptions(categories []*models.TransactionCategory) []EmailBillCategoryOption {
+	parents := make(map[int64]*models.TransactionCategory)
+	for _, category := range categories {
+		parents[category.CategoryId] = category
+	}
+	options := make([]EmailBillCategoryOption, 0, len(categories))
+	for _, category := range categories {
+		parent := parents[category.ParentCategoryId]
+		if category.Deleted || category.Hidden || category.ParentCategoryId == 0 || parent == nil || parent.Deleted || parent.Hidden {
+			continue
+		}
+		options = append(options, EmailBillCategoryOption{ID: category.CategoryId, Name: parent.Name + " / " + category.Name})
+	}
+	return options
+}
+
 func (s *EmailBillFinalizer) createClaimedCategory(c core.Context, uid int64, categoryType models.TransactionCategoryType, name string) (int64, error) {
 	name = strings.TrimSpace(name)
 	if len([]rune(name)) > 64 {
 		name = string([]rune(name)[:64])
 	}
 	if name == "" {
-		return 0, fmt.Errorf("LLM proposed an empty category")
+		return 0, fmt.Errorf("empty category name")
+	}
+	user, err := Users.GetUserById(c, uid)
+	if err != nil {
+		return 0, err
+	}
+	parentName := locales.GetLocaleTextItems(user.Language).GlobalTextItems.DefaultEmailBillCategoryParentName
+	if parentName == "" {
+		parentName = "Email bills"
 	}
 	normalized := strings.ToLower(strings.Join(strings.Fields(name), " "))
-	database := s.db.UserDataStore.Choose(uid)
 	categoryID := int64(0)
-	err := database.DoTransaction(c, func(sess *xorm.Session) error {
+	err = s.db.UserDataStore.Choose(uid).DoTransaction(c, func(sess *xorm.Session) error {
 		claim := &models.EmailBillCategoryCreationClaim{}
 		claimExists, err := sess.Where("uid=? AND category_type=? AND parent_category_id=? AND normalized_name=?", uid, categoryType, 0, normalized).Get(claim)
 		if err != nil {
 			return err
 		}
-		if claimExists && claim.CategoryId > 0 {
-			categoryID = claim.CategoryId
-			return nil
-		}
-		existing := &models.TransactionCategory{}
-		existingFound, err := sess.Where("uid=? AND deleted=? AND type=? AND name=?", uid, false, categoryType, name).Get(existing)
-		if err != nil {
+		var categories []*models.TransactionCategory
+		if err := sess.Where("uid=? AND deleted=? AND type=?", uid, false, categoryType).Find(&categories); err != nil {
 			return err
 		}
-		if existingFound {
-			categoryID = existing.CategoryId
-		} else {
-			last := &models.TransactionCategory{}
-			_, err = sess.Where("uid=? AND deleted=? AND type=? AND parent_category_id=?", uid, false, categoryType, 0).OrderBy("display_order desc").Limit(1).Get(last)
+		for _, option := range emailBillUsableCategoryOptions(categories) {
+			for _, category := range categories {
+				if category.CategoryId == option.ID && ((claimExists && category.CategoryId == claim.CategoryId) || strings.EqualFold(category.Name, name)) {
+					categoryID = category.CategoryId
+					break
+				}
+			}
+			if categoryID > 0 {
+				break
+			}
+		}
+		if categoryID == 0 {
+			parentID := int64(0)
+			parentOrder := int32(0)
+			for _, category := range categories {
+				if category.ParentCategoryId != 0 {
+					continue
+				}
+				if category.DisplayOrder > parentOrder {
+					parentOrder = category.DisplayOrder
+				}
+				if !category.Hidden && category.Name == parentName {
+					parentID = category.CategoryId
+				}
+			}
+			now := time.Now().Unix()
+			if parentID == 0 {
+				parentID = s.uuids.GenerateUuid(uuid.UUID_TYPE_CATEGORY)
+				_, err := sess.Insert(&models.TransactionCategory{CategoryId: parentID, Uid: uid, Type: categoryType,
+					Name: parentName, DisplayOrder: parentOrder + 1, Icon: 1, Color: "607D8B", CreatedUnixTime: now, UpdatedUnixTime: now})
+				if err != nil {
+					return err
+				}
+			}
+			order := int32(0)
+			for _, category := range categories {
+				if category.ParentCategoryId == parentID && category.DisplayOrder > order {
+					order = category.DisplayOrder
+				}
+			}
+			categoryID = s.uuids.GenerateUuid(uuid.UUID_TYPE_CATEGORY)
+			_, err := sess.Insert(&models.TransactionCategory{CategoryId: categoryID, Uid: uid, Type: categoryType,
+				ParentCategoryId: parentID, Name: name, DisplayOrder: order + 1, Icon: 1, Color: "607D8B", CreatedUnixTime: now, UpdatedUnixTime: now})
 			if err != nil {
 				return err
 			}
-			categoryID = s.uuids.GenerateUuid(uuid.UUID_TYPE_CATEGORY)
-			now := time.Now().Unix()
-			category := &models.TransactionCategory{
-				CategoryId: categoryID, Uid: uid, Type: categoryType, ParentCategoryId: 0, Name: name,
-				DisplayOrder: last.DisplayOrder + 1, Icon: 1, Color: "000000", CreatedUnixTime: now, UpdatedUnixTime: now,
-			}
-			if _, err = sess.Insert(category); err != nil {
-				return err
-			}
 		}
-		if !claimExists {
-			claim = &models.EmailBillCategoryCreationClaim{
-				CategoryClaimId: s.uuids.GenerateUuid(uuid.UUID_TYPE_EMAIL_BILL), Uid: uid, CategoryType: categoryType,
-				ParentCategoryId: 0, NormalizedName: normalized, CategoryId: categoryID, CreatedUnixTime: time.Now().Unix(),
-			}
-			_, err = sess.Insert(claim)
-			return err
+		if claimExists {
+			_, err = sess.ID(claim.CategoryClaimId).Cols("category_id").Update(&models.EmailBillCategoryCreationClaim{CategoryId: categoryID})
+		} else {
+			_, err = sess.Insert(&models.EmailBillCategoryCreationClaim{CategoryClaimId: s.uuids.GenerateUuid(uuid.UUID_TYPE_EMAIL_BILL),
+				Uid: uid, CategoryType: categoryType, NormalizedName: normalized, CategoryId: categoryID, CreatedUnixTime: time.Now().Unix()})
 		}
-		_, err = sess.ID(claim.CategoryClaimId).Cols("category_id").Update(&models.EmailBillCategoryCreationClaim{CategoryId: categoryID})
 		return err
 	})
-	return categoryID, err
+	if err != nil {
+		return 0, err
+	}
+	return categoryID, nil
 }
 
 func emailBillClassifiedCandidateStatus(accountResolved bool, categoryID int64) string {
@@ -304,13 +376,13 @@ func emailBillClassifiedCandidateStatus(accountResolved bool, categoryID int64) 
 		return "awaiting_account"
 	}
 	if categoryID <= 0 {
-		return "awaiting_confirmation"
+		return "awaiting_classification"
 	}
 	return "ready"
 }
 
 func (s *EmailBillFinalizer) classificationForAccountRetry(c core.Context, uid int64, candidate *models.EmailBillCandidate, options []EmailBillCategoryOption) (EmailBillClassificationResult, int64, bool, error) {
-	if candidate.Status != "awaiting_account" || candidate.CurrentClassificationDecisionId <= 0 {
+	if candidate.CurrentClassificationDecisionId <= 0 {
 		return EmailBillClassificationResult{}, 0, false, nil
 	}
 	decision := &models.EmailBillClassificationDecision{}

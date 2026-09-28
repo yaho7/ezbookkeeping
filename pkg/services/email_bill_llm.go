@@ -3,6 +3,7 @@ package services
 import (
 	"encoding/json"
 	"fmt"
+	"math"
 	"strconv"
 	"strings"
 
@@ -69,14 +70,17 @@ func (c *EmailBillClassifier) Classify(ctx core.Context, uid int64, bill emailbi
 		}, nil
 	}
 	if c.client == nil {
-		return EmailBillClassificationResult{Source: "awaiting_confirmation", Reason: "LLM is not configured"}, nil
+		return EmailBillClassificationResult{Source: "fallback", Reason: "LLM is not configured"}, nil
 	}
 	result, err := c.client.Classify(ctx, uid, bill, categories)
 	if err != nil {
-		return EmailBillClassificationResult{Source: "awaiting_confirmation", Reason: err.Error()}, nil
+		return EmailBillClassificationResult{Source: "fallback", Reason: err.Error()}, nil
 	}
-	if result.Confidence < 0 || result.Confidence > 1 {
-		return EmailBillClassificationResult{Source: "awaiting_confirmation", Reason: "LLM confidence is invalid"}, nil
+	if math.IsNaN(result.Confidence) || math.IsInf(result.Confidence, 0) || result.Confidence < 0 || result.Confidence > 1 {
+		return EmailBillClassificationResult{Source: "fallback", Reason: "LLM confidence is invalid"}, nil
+	}
+	if result.Confidence < c.newCategoryThreshold {
+		return EmailBillClassificationResult{Source: "fallback", ProposedCategoryName: strings.TrimSpace(result.NewCategoryName), Confidence: result.Confidence, Reason: "LLM confidence is below the automatic classification threshold"}, nil
 	}
 	if result.CategoryID > 0 {
 		for _, category := range categories {
@@ -84,13 +88,13 @@ func (c *EmailBillClassifier) Classify(ctx core.Context, uid int64, bill emailbi
 				return EmailBillClassificationResult{Source: "llm_existing", CategoryID: result.CategoryID, Confidence: result.Confidence, Reason: result.Reason}, nil
 			}
 		}
-		return EmailBillClassificationResult{Source: "awaiting_confirmation", Confidence: result.Confidence, Reason: "LLM returned an unknown category"}, nil
+		return EmailBillClassificationResult{Source: "fallback", Confidence: result.Confidence, Reason: "LLM returned an unknown category"}, nil
 	}
 	proposedName := strings.TrimSpace(result.NewCategoryName)
 	if proposedName != "" && result.Confidence >= c.newCategoryThreshold {
 		return EmailBillClassificationResult{Source: "llm_new", ProposedCategoryName: proposedName, Confidence: result.Confidence, Reason: result.Reason}, nil
 	}
-	return EmailBillClassificationResult{Source: "awaiting_confirmation", ProposedCategoryName: proposedName, Confidence: result.Confidence, Reason: result.Reason}, nil
+	return EmailBillClassificationResult{Source: "fallback", ProposedCategoryName: proposedName, Confidence: result.Confidence, Reason: result.Reason}, nil
 }
 
 // ConfiguredEmailBillLLMClient reuses ezBookkeeping's text-recognition provider.

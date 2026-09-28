@@ -155,7 +155,7 @@ func TestEmailBillRoutingUsesDefaultsOnlyWithoutMatchingRule(t *testing.T) {
 func TestEmailBillClassifiedCandidateRetainsAccountFailure(t *testing.T) {
 	assert.Equal(t, "awaiting_account", emailBillClassifiedCandidateStatus(false, 12))
 	assert.Equal(t, "awaiting_account", emailBillClassifiedCandidateStatus(false, 0))
-	assert.Equal(t, "awaiting_confirmation", emailBillClassifiedCandidateStatus(true, 0))
+	assert.Equal(t, "awaiting_classification", emailBillClassifiedCandidateStatus(true, 0))
 	assert.Equal(t, "ready", emailBillClassifiedCandidateStatus(true, 12))
 }
 
@@ -170,7 +170,8 @@ func TestEmailBillFinalizerCallsAIWhenDefaultAccountPreparationFails(t *testing.
 	candidate := &models.EmailBillCandidate{CandidateId: 30, Uid: 7, MessageId: 20, SelectedVariantId: 40, Status: "awaiting_account"}
 	_, err := s.UserDataDB(7).NewSession(c).Insert(candidate,
 		&models.EmailBillCandidateVariant{VariantId: 40, CandidateId: 30, Currency: "CNY", Direction: "expense", Amount: -100},
-		&models.TransactionCategory{CategoryId: 9, Uid: 7, Type: models.CATEGORY_TYPE_EXPENSE, Name: "Dining"})
+		&models.TransactionCategory{CategoryId: 8, Uid: 7, Type: models.CATEGORY_TYPE_EXPENSE, Name: "Food"},
+		&models.TransactionCategory{CategoryId: 9, Uid: 7, Type: models.CATEGORY_TYPE_EXPENSE, ParentCategoryId: 8, Name: "Dining"})
 	require.NoError(t, err)
 	client := &fakeEmailBillLLMClient{result: EmailBillLLMResult{CategoryID: 9, Confidence: 0.95}}
 	finalizer := &EmailBillFinalizer{

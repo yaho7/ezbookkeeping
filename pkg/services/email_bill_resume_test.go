@@ -22,17 +22,14 @@ func TestEmailBillResumePagesBeyond100AndContinuesAfterIndividualFailure(t *test
 		&models.EmailBillImportRun{ImportRunId: 50, MessageId: 20})
 	require.NoError(t, err)
 	for index := int64(0); index < 205; index++ {
-		status := "awaiting_account"
-		if index%2 == 1 {
-			status = "awaiting_classification"
-		}
+		status := []string{"awaiting_account", "awaiting_classification", "awaiting_routing", "import_failed", "ready", "awaiting_confirmation"}[index%6]
 		_, err = s.UserDataDB(7).NewSession(c).Insert(&models.EmailBillCandidate{
 			CandidateId: 1000 + index, Uid: 7, MessageId: 20, SelectedVariantId: 40,
 			Status: status, IdentityKey: fmt.Sprintf("pending:%d", index), IdentityVersion: 1,
 		})
 		require.NoError(t, err)
 	}
-	for index, status := range []string{"awaiting_confirmation", "imported", "import_failed", "ready"} {
+	for index, status := range []string{"conflict", "imported"} {
 		_, err = s.UserDataDB(7).NewSession(c).Insert(&models.EmailBillCandidate{
 			CandidateId: int64(2000 + index), Uid: 7, MessageId: 20, SelectedVariantId: 40,
 			Status: status, IdentityKey: status, IdentityVersion: 1,

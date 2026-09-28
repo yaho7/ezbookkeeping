@@ -15,8 +15,10 @@ type LocaleTextItems struct {
 
 // GlobalTextItems represents global text items need to be translated
 type GlobalTextItems struct {
-	AppName                     string
-	DefaultEmailBillAccountName string
+	AppName                            string
+	DefaultEmailBillAccountName        string
+	DefaultEmailBillCategoryParentName string
+	UncategorizedEmailBillCategoryName string
 }
 
 // DefaultTypes represents default types for the language

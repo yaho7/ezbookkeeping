@@ -6,8 +6,10 @@ import (
 
 var zhHans = &LocaleTextItems{
 	GlobalTextItems: &GlobalTextItems{
-		AppName:                     "ezBookkeeping",
-		DefaultEmailBillAccountName: "默认记账账户",
+		AppName:                            "ezBookkeeping",
+		DefaultEmailBillAccountName:        "默认记账账户",
+		DefaultEmailBillCategoryParentName: "邮件记账",
+		UncategorizedEmailBillCategoryName: "未分类",
 	},
 	DefaultTypes: &DefaultTypes{
 		DecimalSeparator:    core.DECIMAL_SEPARATOR_DOT,

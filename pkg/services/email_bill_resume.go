@@ -10,7 +10,7 @@ import (
 )
 
 // ResumePending continues already parsed bills without downloading their mail.
-// Conflicts, review decisions and imported bills are never replayed automatically.
+// Conflicted and imported bills are never replayed automatically.
 func (s *EmailBillFinalizer) ResumePending(c core.Context, uid int64, observer emailbill.ScanObserver) error {
 	return s.resumePending(c, uid, observer, s.finalizeCandidate)
 }
@@ -20,7 +20,7 @@ func (s *EmailBillFinalizer) resumePending(c core.Context, uid int64, observer e
 	database := s.db.UserDataStore.Choose(uid)
 	last := &models.EmailBillCandidate{}
 	has, err := database.NewSession(c).Where("uid=? AND selected_variant_id>?", uid, 0).
-		In("status", "awaiting_account", "awaiting_classification").OrderBy("candidate_id desc").Limit(1).Get(last)
+		In("status", "awaiting_routing", "awaiting_account", "awaiting_classification", "awaiting_confirmation", "ready", "import_failed").OrderBy("candidate_id desc").Limit(1).Get(last)
 	if err != nil || !has {
 		return err
 	}
@@ -37,7 +37,7 @@ func (s *EmailBillFinalizer) resumePending(c core.Context, uid int64, observer e
 		}
 		var candidates []*models.EmailBillCandidate
 		if err := database.NewSession(c).Where("uid=? AND selected_variant_id>? AND candidate_id>? AND candidate_id<=?", uid, 0, cursor, last.CandidateId).
-			In("status", "awaiting_account", "awaiting_classification").OrderBy("candidate_id asc").Limit(100).Find(&candidates); err != nil {
+			In("status", "awaiting_routing", "awaiting_account", "awaiting_classification", "awaiting_confirmation", "ready", "import_failed").OrderBy("candidate_id asc").Limit(100).Find(&candidates); err != nil {
 			return errors.Join(firstFailure, err)
 		}
 		if len(candidates) == 0 {
