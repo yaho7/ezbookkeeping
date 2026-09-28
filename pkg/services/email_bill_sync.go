@@ -40,7 +40,8 @@ type EmailBillSyncService struct {
 	active map[int64]int64
 	// SQLite uses shared-cache connections: a list reader can otherwise make a
 	// concurrent scan write fail with SQLITE_LOCKED instead of waiting. Guard
-	// all task/index access, including readers, for the SQL operation only.
+	// task/index access and native imports, including mailbox snapshot readers,
+	// for the SQL operation only.
 	// Lock order is mu then metadataMu; never acquire mu while holding metadataMu.
 	metadataMu sync.Mutex
 }

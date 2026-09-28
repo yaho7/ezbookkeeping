@@ -30,6 +30,11 @@ func NewEmailBillTransactionImporter() *EmailBillTransactionImporter {
 
 // Import creates or returns the one transaction owned by a candidate.
 func (s *EmailBillTransactionImporter) Import(c core.Context, uid, runID, candidateID, accountID, categoryID int64, bill emailbill.StandardBill) (int64, error) {
+	// Mailbox details read native accounts and categories under this gate.
+	// Serialize the SQL boundary with those snapshots to avoid SQLITE_LOCKED
+	// in shared-cache databases. Parsing and AI never hold the gate.
+	EmailBillSync.metadataMu.Lock()
+	defer EmailBillSync.metadataMu.Unlock()
 	database := s.db.UserDataStore.Choose(uid)
 	key := hashEmailBillValue([]byte(fmt.Sprintf("transaction\x00%d\x00%d", uid, candidateID)))
 	intent, err := s.ensureIntent(c, database, candidateID, key)

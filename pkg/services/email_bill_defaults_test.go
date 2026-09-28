@@ -18,12 +18,16 @@ import (
 
 // These database tests run serially and restore the shared service containers.
 func emailBillDefaultsTestStore(t *testing.T, additionalModels ...any) *EmailBillDefaultAccountService {
+	return emailBillDefaultsTestStoreWithConnections(t, 1, additionalModels...)
+}
+
+func emailBillDefaultsTestStoreWithConnections(t *testing.T, connections uint16, additionalModels ...any) *EmailBillDefaultAccountService {
 	t.Helper()
 	previousDB, previousUUID := *datastore.Container, *uuid.Container
 	t.Cleanup(func() { *datastore.Container, *uuid.Container = previousDB, previousUUID })
 	config := &settings.Config{
 		DatabaseConfig: &settings.DatabaseConfig{DatabaseType: settings.Sqlite3DbType,
-			DatabasePath: filepath.Join(t.TempDir(), "email-defaults.db"), MaxOpenConnection: 1, MaxIdleConnection: 1},
+			DatabasePath: filepath.Join(t.TempDir(), "email-defaults.db"), MaxOpenConnection: connections, MaxIdleConnection: connections},
 		UuidGeneratorType: settings.InternalUuidGeneratorType,
 	}
 	require.NoError(t, datastore.InitializeDataStore(config))
