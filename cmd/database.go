@@ -201,6 +201,7 @@ func updateAllDatabaseTablesStructure(c *core.CliContext) error {
 		new(models.EmailBillAccountRoutingRule),
 		new(models.EmailBillAccountRoutingRuleVersion),
 		new(models.EmailBillAccountRoutingDecision),
+		new(models.EmailBillDefaultAccount),
 		new(models.EmailBillClassificationRule),
 		new(models.EmailBillClassificationRuleVersion),
 		new(models.EmailBillLLMClassificationRun),

@@ -103,6 +103,20 @@ func (s *UserService) GetUserById(c core.Context, uid int64) (*models.User, erro
 	return user, nil
 }
 
+// SetDefaultAccountIfUnchanged changes only the default account if the profile
+// still contains the value observed before preparing an email bill account.
+func (s *UserService) SetDefaultAccountIfUnchanged(c core.Context, uid, previousID, accountID int64) error {
+	if uid <= 0 {
+		return errs.ErrUserIdInvalid
+	}
+	if accountID <= 0 {
+		return errs.ErrAccountIdInvalid
+	}
+	_, err := s.UserDB().NewSession(c).Where("uid=? AND deleted=? AND default_account_id=?", uid, false, previousID).
+		Cols("default_account_id", "updated_unix_time").Update(&models.User{DefaultAccountId: accountID, UpdatedUnixTime: time.Now().Unix()})
+	return err
+}
+
 // GetUserByUsername returns the user model according to user name
 func (s *UserService) GetUserByUsername(c core.Context, username string) (*models.User, error) {
 	if username == "" {

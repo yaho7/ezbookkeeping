@@ -291,6 +291,15 @@ type EmailBillCategoryCreationProposal struct {
 	CreatedUnixTime   int64
 }
 
+// EmailBillDefaultAccount retains the automatically created account per currency.
+type EmailBillDefaultAccount struct {
+	DefaultAccountId int64  `xorm:"PK"`
+	Uid              int64  `xorm:"UNIQUE(UNQ_email_bill_default_account) NOT NULL"`
+	Currency         string `xorm:"UNIQUE(UNQ_email_bill_default_account) VARCHAR(3) NOT NULL"`
+	AccountId        int64  `xorm:"INDEX NOT NULL"`
+	CreatedUnixTime  int64
+}
+
 // EmailBillCategoryCreationClaim prevents concurrent duplicate AI categories.
 type EmailBillCategoryCreationClaim struct {
 	CategoryClaimId  int64                   `xorm:"PK"`

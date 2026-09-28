@@ -18,19 +18,21 @@ import (
 
 // EmailBillFinalizer routes, classifies, learns and imports resolved candidates.
 type EmailBillFinalizer struct {
-	db         *datastore.DataStoreContainer
-	uuids      *uuid.UuidContainer
-	automation *EmailBillAutomationService
-	classifier *EmailBillClassifier
-	importer   *EmailBillTransactionImporter
+	db              *datastore.DataStoreContainer
+	uuids           *uuid.UuidContainer
+	automation      *EmailBillAutomationService
+	classifier      *EmailBillClassifier
+	importer        *EmailBillTransactionImporter
+	defaultAccounts emailBillDefaultAccountResolver
 }
 
 // NewEmailBillFinalizer creates the production candidate finalizer.
 func NewEmailBillFinalizer() *EmailBillFinalizer {
 	return &EmailBillFinalizer{
 		db: datastore.Container, uuids: uuid.Container, automation: EmailBillAutomation,
-		classifier: NewEmailBillClassifier(NewConfiguredEmailBillLLMClient(), 0.8),
-		importer:   NewEmailBillTransactionImporter(),
+		classifier:      NewEmailBillClassifier(NewConfiguredEmailBillLLMClient(), 0.8),
+		importer:        NewEmailBillTransactionImporter(),
+		defaultAccounts: EmailBillDefaultAccounts,
 	}
 }
 
@@ -74,14 +76,10 @@ func (s *EmailBillFinalizer) finalizeCandidate(c core.Context, uid, mailboxID, r
 		rule.ID, rule.Enabled, rule.Priority, rule.TargetAccountID = info.Version.RoutingRuleVersionId, info.Rule.Enabled, info.Rule.Priority, info.Version.TargetAccountId
 		routingRules = append(routingRules, rule)
 	}
-	accountDecision, routed := emailbill.ResolveAccount(bill, mailboxID, routingRules)
+	accountDecision, routed, accountErr := s.resolveAccount(c, uid, mailboxID, bill, routingRules)
 	if err = s.persistAccountDecision(c, uid, runID, candidate, accountDecision, routed); err != nil {
 		return err
 	}
-	if !routed {
-		return nil
-	}
-
 	classificationInfos, err := s.automation.ListClassificationRules(c, uid)
 	if err != nil {
 		return err
@@ -106,7 +104,8 @@ func (s *EmailBillFinalizer) finalizeCandidate(c core.Context, uid, mailboxID, r
 	}
 	classification, err := s.classifier.Classify(c, uid, bill, accountDecision.AccountID, classificationRules, options)
 	if err != nil {
-		return s.persistAwaitingClassification(c, uid, runID, candidate, err.Error())
+		return errors.Join(accountErr, s.persistClassificationDecision(c, uid, runID, candidate,
+			EmailBillClassificationResult{Source: "awaiting_confirmation", Reason: err.Error()}, 0, routed))
 	}
 	if classification.Source == "llm_new" {
 		classification.CategoryID, err = s.createClaimedCategory(c, uid, categoryType, classification.ProposedCategoryName)
@@ -133,11 +132,11 @@ func (s *EmailBillFinalizer) finalizeCandidate(c core.Context, uid, mailboxID, r
 		}
 		classification.RuleVersionID = learned.Version.ClassificationRuleVersionId
 	}
-	if err = s.persistClassificationDecision(c, uid, runID, candidate, classification, llmRunID); err != nil {
+	if err = s.persistClassificationDecision(c, uid, runID, candidate, classification, llmRunID, routed); err != nil {
 		return err
 	}
-	if classification.CategoryID <= 0 {
-		return nil
+	if !routed || classification.CategoryID <= 0 {
+		return accountErr
 	}
 	transactionID, err := s.importer.Import(c, uid, runID, candidate.CandidateId, accountDecision.AccountID, classification.CategoryID, bill)
 	if err != nil {
@@ -150,8 +149,11 @@ func (s *EmailBillFinalizer) finalizeCandidate(c core.Context, uid, mailboxID, r
 
 func (s *EmailBillFinalizer) persistAccountDecision(c core.Context, uid, runID int64, candidate *models.EmailBillCandidate, decision emailbill.AccountDecision, found bool) error {
 	status, decisionType, reason := "awaiting_classification", "rule", decision.Reason
+	if found && decision.RuleID == 0 {
+		decisionType = "default"
+	}
 	if !found {
-		status, decisionType, reason = "awaiting_account", "unresolved", "no account routing rule matched"
+		status, decisionType = "awaiting_account", "unresolved"
 	}
 	database := s.db.UserDataStore.Choose(uid)
 	return database.DoTransaction(c, func(sess *xorm.Session) error {
@@ -169,17 +171,14 @@ func (s *EmailBillFinalizer) persistAccountDecision(c core.Context, uid, runID i
 		if err != nil {
 			return err
 		}
-		return EmailBillAutomationStore.insertAuditEvent(sess, uid, candidate.MessageId, candidate.CandidateId, runID, "account_routed", "rule", map[string]any{
+		return EmailBillAutomationStore.insertAuditEvent(sess, uid, candidate.MessageId, candidate.CandidateId, runID, "account_routed", decisionType, map[string]any{
 			"decisionId": model.AccountDecisionId, "ruleVersionId": decision.RuleID, "accountId": decision.AccountID, "status": status,
 		})
 	})
 }
 
-func (s *EmailBillFinalizer) persistClassificationDecision(c core.Context, uid, runID int64, candidate *models.EmailBillCandidate, decision EmailBillClassificationResult, llmRunID int64) error {
-	status := "ready"
-	if decision.CategoryID <= 0 {
-		status = "awaiting_confirmation"
-	}
+func (s *EmailBillFinalizer) persistClassificationDecision(c core.Context, uid, runID int64, candidate *models.EmailBillCandidate, decision EmailBillClassificationResult, llmRunID int64, accountResolved bool) error {
+	status := emailBillClassifiedCandidateStatus(accountResolved, decision.CategoryID)
 	database := s.db.UserDataStore.Choose(uid)
 	return database.DoTransaction(c, func(sess *xorm.Session) error {
 		model := &models.EmailBillClassificationDecision{
@@ -295,8 +294,25 @@ func (s *EmailBillFinalizer) createClaimedCategory(c core.Context, uid int64, ca
 	return categoryID, err
 }
 
-func (s *EmailBillFinalizer) persistAwaitingClassification(c core.Context, uid, runID int64, candidate *models.EmailBillCandidate, reason string) error {
-	return s.persistClassificationDecision(c, uid, runID, candidate, EmailBillClassificationResult{Source: "awaiting_confirmation", Reason: reason}, 0)
+func emailBillClassifiedCandidateStatus(accountResolved bool, categoryID int64) string {
+	if !accountResolved {
+		return "awaiting_account"
+	}
+	if categoryID <= 0 {
+		return "awaiting_confirmation"
+	}
+	return "ready"
+}
+
+func (s *EmailBillFinalizer) resolveAccount(c core.Context, uid, mailboxID int64, bill emailbill.StandardBill, rules []emailbill.AccountRoutingRule) (emailbill.AccountDecision, bool, error) {
+	if decision, found := emailbill.ResolveAccount(bill, mailboxID, rules); found {
+		return decision, true, nil
+	}
+	accountID, err := s.defaultAccounts.Resolve(c, uid, bill.Currency)
+	if err != nil {
+		return emailbill.AccountDecision{Reason: "prepare default account: " + err.Error()}, false, err
+	}
+	return emailbill.AccountDecision{AccountID: accountID, Reason: "used default bookkeeping account"}, true, nil
 }
 
 func (s *EmailBillFinalizer) updateCandidateStatus(c core.Context, uid, candidateID int64, status string) error {

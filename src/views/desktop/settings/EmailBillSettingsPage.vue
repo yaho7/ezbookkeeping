@@ -98,7 +98,7 @@
                 <v-window-item value="routing">
                     <v-card>
                         <v-card-title class="d-flex align-center"><span>{{ tt('Account Routing') }}</span><v-spacer /><v-btn color="primary" prepend-icon="$plus" @click="openRoute()">{{ tt('Add') }}</v-btn></v-card-title>
-                        <v-card-subtitle class="pb-3 text-wrap">{{ tt('Route by bank, account kind, last four digits, currency or mailbox. Empty fields match any value.') }}</v-card-subtitle>
+                        <v-card-subtitle class="pb-3 text-wrap">{{ tt('Account routing is optional. Bills use your default account, or an account is created automatically for their currency.') }}</v-card-subtitle>
                         <v-table><thead><tr><th>{{ tt('Conditions') }}</th><th>{{ tt('Target Account') }}</th><th>{{ tt('Priority') }}</th><th>{{ tt('Status') }}</th><th class="text-right">{{ tt('Actions') }}</th></tr></thead>
                             <tbody><tr v-for="rule in store.routes" :key="rule.id"><td>{{ routeSummary(rule) }}</td><td>{{ accountName(rule.targetAccountId) }}</td><td>{{ rule.priority }}</td><td>{{ rule.enabled ? tt('Enabled') : tt('Disabled') }}</td><td class="text-right"><v-btn size="small" variant="text" @click="openRoute(rule)">{{ tt('Edit') }}</v-btn><v-btn v-if="rule.enabled" size="small" color="error" variant="text" @click="disableRoute(rule.id)">{{ tt('Disable') }}</v-btn></td></tr><tr v-if="!store.routes.length"><td colspan="5" class="text-center text-medium-emphasis py-8">{{ tt('No routing rules') }}</td></tr></tbody>
                         </v-table>

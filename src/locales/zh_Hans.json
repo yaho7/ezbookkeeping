@@ -2903,6 +2903,7 @@
     "Conditions": "匹配条件",
     "Target Account": "目标账户",
     "No routing rules": "暂无账户路由",
+    "Account routing is optional. Bills use your default account, or an account is created automatically for their currency.": "账户路由为可选配置。未匹配的账单使用同币种的默认账户；没有可用账户时会自动创建，无需先配置。",
     "Add Routing Rule": "新增账户路由",
     "Edit Routing Rule": "编辑账户路由",
     "Account Kind": "账户类型",

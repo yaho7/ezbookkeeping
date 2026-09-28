@@ -6,7 +6,8 @@ import (
 
 var zhHant = &LocaleTextItems{
 	GlobalTextItems: &GlobalTextItems{
-		AppName: "ezBookkeeping",
+		AppName:                     "ezBookkeeping",
+		DefaultEmailBillAccountName: "預設記帳帳戶",
 	},
 	DefaultTypes: &DefaultTypes{
 		DecimalSeparator:    core.DECIMAL_SEPARATOR_DOT,
