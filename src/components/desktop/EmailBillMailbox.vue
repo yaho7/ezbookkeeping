@@ -121,10 +121,11 @@ const pageCount = computed(() => Math.max(1, Math.ceil(total.value / 50)));
 const folderOptions = computed(() => [...new Set([...(task.value?.folders || []).map(item => item.name), ...folders.value])]);
 const counters = computed(() => [
     { label: 'Scanned', value: task.value?.scanned || 0 }, { label: 'Downloaded', value: task.value?.downloaded || 0 },
-    { label: 'Processed', value: task.value?.processed || 0 }, { label: 'Skipped', value: task.value?.skipped || 0 }, { label: 'Failed', value: task.value?.failed || 0 }
+    { label: 'Processed', value: task.value?.processed || 0 }, { label: 'Resumed Bills', value: task.value?.resumed || 0 },
+    { label: 'Skipped', value: task.value?.skipped || 0 }, { label: 'Failed', value: task.value?.failed || 0 }
 ]);
 const labels: Record<string, string> = { ready: 'Waiting for download', downloaded: 'Downloaded', processing: 'Processing', succeeded: 'Parsed', no_output: 'No bills parsed', not_matched: 'Not Matched', rejected: 'Skipped', duplicate: 'Already processed', oversized: 'Message too large', failed: 'Failed', partial_success: 'Partially completed', not_processed: 'Not processed', imported: 'Imported', awaiting_account: 'Awaiting account', awaiting_classification: 'Awaiting classification', awaiting_confirmation: 'Awaiting confirmation', import_failed: 'Import failed', conflict: 'Conflict' };
-const stageLabels: Record<string, string> = { queued: 'Queued', connecting: 'Connecting to mailbox', scanning: 'Scanning folders', processing: 'Parsing & Bookkeeping' };
+const stageLabels: Record<string, string> = { queued: 'Queued', resuming: 'Continuing pending bills', connecting: 'Connecting to mailbox', scanning: 'Scanning folders', processing: 'Parsing & Bookkeeping' };
 const statusOptions = computed(() => [{ title: tt('All Statuses'), value: '' }, ...['succeeded', 'no_output', 'not_matched', 'duplicate', 'oversized', 'failed', 'partial_success', 'not_processed', 'ready', 'downloaded', 'processing'].map(value => ({ title: messageStatus(value), value }))]);
 
 watch(active, value => emit('active', value), { immediate: true });

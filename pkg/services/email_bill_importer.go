@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 	"crypto/sha256"
+	"errors"
 	"fmt"
 	"regexp"
 	"strings"
@@ -167,6 +168,15 @@ func (s *EmailBillImportService) importWithObserver(c core.Context, uid int64, c
 	if err != nil {
 		return fmt.Errorf("load email bill parser rules: %w", err)
 	}
+	var resumeErr error
+	if resumer, ok := s.finalizer.(interface {
+		ResumePending(core.Context, int64, emailbill.ScanObserver) error
+	}); ok {
+		resumeErr = resumer.ResumePending(c, uid, observer)
+		if err := c.Err(); err != nil {
+			return errors.Join(resumeErr, err)
+		}
+	}
 	mailbox := s.mailboxFactory(config, nil)
 	if observable, ok := mailbox.(interface{ SetScanObserver(emailbill.ScanObserver) }); ok {
 		observable.SetScanObserver(observer)
@@ -231,18 +241,18 @@ func (s *EmailBillImportService) importWithObserver(c core.Context, uid int64, c
 	}); ok {
 		streaming.SetMessageHandler(process)
 		_, err = mailbox.FetchRecent(c)
-		return err
+		return errors.Join(resumeErr, err)
 	}
 	messages, err := mailbox.FetchRecent(c)
 	if err != nil {
-		return err
+		return errors.Join(resumeErr, err)
 	}
 	for _, message := range messages {
 		if err := process(message); err != nil {
-			return err
+			return errors.Join(resumeErr, err)
 		}
 	}
-	return nil
+	return resumeErr
 }
 
 func (s *EmailBillImportService) createTransaction(c core.Context, transaction *models.Transaction, marker string) error {

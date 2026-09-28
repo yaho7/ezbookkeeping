@@ -2903,6 +2903,8 @@
     "Conditions": "Conditions",
     "Target Account": "Target Account",
     "No routing rules": "No routing rules",
+    "Resumed Bills": "Resumed Bills",
+    "Continuing pending bills": "Continuing pending bills",
     "Account routing is optional. Bills use your default account, or an account is created automatically for their currency.": "Account routing is optional. Bills use your default account, or an account is created automatically for their currency.",
     "Add Routing Rule": "Add Routing Rule",
     "Edit Routing Rule": "Edit Routing Rule",

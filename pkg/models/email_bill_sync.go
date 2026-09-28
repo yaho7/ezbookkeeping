@@ -11,6 +11,7 @@ type EmailBillSyncTask struct {
 	Scanned           int64  `json:"scanned"`
 	Downloaded        int64  `json:"downloaded"`
 	Processed         int64  `json:"processed"`
+	Resumed           int64  `json:"resumed"`
 	Skipped           int64  `json:"skipped"`
 	Failed            int64  `json:"failed"`
 	FoldersJson       string `xorm:"TEXT" json:"-"`

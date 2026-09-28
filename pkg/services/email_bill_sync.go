@@ -210,6 +210,20 @@ func (s *EmailBillSyncService) run(task *models.EmailBillSyncTask, config *setti
 	log.Infof(c, "[email_bill_sync] task=%d started trigger=%s", task.TaskId, task.TriggerType)
 	lastSave := time.Now()
 	runErr = EmailBillImporter.importWithObserver(c, task.Uid, config, func(event emailbill.ScanEvent) error {
+		if event.Kind == "resume" {
+			task.Stage = "resuming"
+			if event.Processed && event.Status != "failed" {
+				task.Resumed++
+			}
+			if event.Status == "finished" {
+				task.Stage = "connecting"
+			}
+			if event.Status == "processing" || event.Status == "finished" || time.Since(lastSave) >= time.Second {
+				lastSave = time.Now()
+				return s.save(c, task, folders)
+			}
+			return nil
+		}
 		folder := findEmailBillFolder(&folders, event.Folder)
 		if event.Kind == "folder" {
 			folder.Status = event.Status

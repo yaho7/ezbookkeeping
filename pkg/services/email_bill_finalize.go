@@ -102,35 +102,40 @@ func (s *EmailBillFinalizer) finalizeCandidate(c core.Context, uid, mailboxID, r
 	for _, category := range categories {
 		options = append(options, EmailBillCategoryOption{ID: category.CategoryId, Name: category.Name})
 	}
-	classification, err := s.classifier.Classify(c, uid, bill, accountDecision.AccountID, classificationRules, options)
+	classification, llmRunID, reused, err := s.classificationForAccountRetry(c, uid, candidate, options)
 	if err != nil {
-		return errors.Join(accountErr, s.persistClassificationDecision(c, uid, runID, candidate,
-			EmailBillClassificationResult{Source: "awaiting_confirmation", Reason: err.Error()}, 0, routed))
+		return err
 	}
-	if classification.Source == "llm_new" {
-		classification.CategoryID, err = s.createClaimedCategory(c, uid, categoryType, classification.ProposedCategoryName)
+	if !reused {
+		classification, err = s.classifier.Classify(c, uid, bill, accountDecision.AccountID, classificationRules, options)
 		if err != nil {
-			classification.Source = "awaiting_confirmation"
-			classification.Reason = err.Error()
+			return errors.Join(accountErr, s.persistClassificationDecision(c, uid, runID, candidate,
+				EmailBillClassificationResult{Source: "awaiting_confirmation", Reason: err.Error()}, 0, routed))
 		}
-	}
-	llmRunID := int64(0)
-	if strings.HasPrefix(classification.Source, "llm_") || classification.Source == "awaiting_confirmation" {
-		llmRunID, err = s.persistLLMRun(c, uid, runID, candidate.CandidateId, categoryType, classification, options)
-		if err != nil {
-			return err
+		if classification.Source == "llm_new" {
+			classification.CategoryID, err = s.createClaimedCategory(c, uid, categoryType, classification.ProposedCategoryName)
+			if err != nil {
+				classification.Source = "awaiting_confirmation"
+				classification.Reason = err.Error()
+			}
 		}
-	}
-	if classification.CategoryID > 0 && strings.HasPrefix(classification.Source, "llm_") && strings.TrimSpace(bill.Merchant) != "" {
-		learned, learnErr := s.automation.SaveClassificationRule(c, uid, EmailBillClassificationRuleInput{
-			Origin: emailbill.RuleOriginLearnedLLM, Enabled: true, MerchantPattern: bill.Merchant,
-			MatchType: emailbill.MatchExact, Bank: bill.AccountHint.Bank, AccountID: accountDecision.AccountID,
-			FlowType: bill.FlowType, CategoryID: classification.CategoryID, Confidence: classification.Confidence,
-		})
-		if learnErr != nil {
-			return learnErr
+		if strings.HasPrefix(classification.Source, "llm_") || classification.Source == "awaiting_confirmation" {
+			llmRunID, err = s.persistLLMRun(c, uid, runID, candidate.CandidateId, categoryType, classification, options)
+			if err != nil {
+				return err
+			}
 		}
-		classification.RuleVersionID = learned.Version.ClassificationRuleVersionId
+		if classification.CategoryID > 0 && strings.HasPrefix(classification.Source, "llm_") && strings.TrimSpace(bill.Merchant) != "" {
+			learned, learnErr := s.automation.SaveClassificationRule(c, uid, EmailBillClassificationRuleInput{
+				Origin: emailbill.RuleOriginLearnedLLM, Enabled: true, MerchantPattern: bill.Merchant,
+				MatchType: emailbill.MatchExact, Bank: bill.AccountHint.Bank, AccountID: accountDecision.AccountID,
+				FlowType: bill.FlowType, CategoryID: classification.CategoryID, Confidence: classification.Confidence,
+			})
+			if learnErr != nil {
+				return learnErr
+			}
+			classification.RuleVersionID = learned.Version.ClassificationRuleVersionId
+		}
 	}
 	if err = s.persistClassificationDecision(c, uid, runID, candidate, classification, llmRunID, routed); err != nil {
 		return err
@@ -302,6 +307,25 @@ func emailBillClassifiedCandidateStatus(accountResolved bool, categoryID int64) 
 		return "awaiting_confirmation"
 	}
 	return "ready"
+}
+
+func (s *EmailBillFinalizer) classificationForAccountRetry(c core.Context, uid int64, candidate *models.EmailBillCandidate, options []EmailBillCategoryOption) (EmailBillClassificationResult, int64, bool, error) {
+	if candidate.Status != "awaiting_account" || candidate.CurrentClassificationDecisionId <= 0 {
+		return EmailBillClassificationResult{}, 0, false, nil
+	}
+	decision := &models.EmailBillClassificationDecision{}
+	has, err := s.db.UserDataStore.Choose(uid).NewSession(c).
+		Where("classification_decision_id=? AND candidate_id=?", candidate.CurrentClassificationDecisionId, candidate.CandidateId).Get(decision)
+	if err != nil || !has {
+		return EmailBillClassificationResult{}, 0, false, err
+	}
+	for _, option := range options {
+		if option.ID == decision.CategoryId {
+			return EmailBillClassificationResult{Source: decision.DecisionType, CategoryID: decision.CategoryId,
+				RuleVersionID: decision.ClassificationRuleVersionId, Confidence: decision.Confidence, Reason: decision.Reason}, decision.LLMRunId, true, nil
+		}
+	}
+	return EmailBillClassificationResult{}, 0, false, nil
 }
 
 func (s *EmailBillFinalizer) resolveAccount(c core.Context, uid, mailboxID int64, bill emailbill.StandardBill, rules []emailbill.AccountRoutingRule) (emailbill.AccountDecision, bool, error) {

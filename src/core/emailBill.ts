@@ -52,6 +52,7 @@ export interface EmailBillSyncTask {
     scanned: number;
     downloaded: number;
     processed: number;
+    resumed?: number;
     skipped: number;
     failed: number;
     errorMessage: string;

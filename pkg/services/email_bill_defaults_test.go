@@ -191,4 +191,13 @@ func TestEmailBillFinalizerCallsAIWhenDefaultAccountPreparationFails(t *testing.
 	require.True(t, has)
 	assert.Equal(t, int64(9), classification.CategoryId)
 	assert.Equal(t, "llm_existing", classification.DecisionType)
+	// The next account retry reuses the persisted classification and LLM run.
+	require.ErrorContains(t, finalizer.finalizeCandidate(c, 7, 7, 50, stored), "cannot create account")
+	assert.Equal(t, 1, client.calls)
+	runs, err := s.UserDataDB(7).NewSession(c).Count(&models.EmailBillLLMClassificationRun{})
+	require.NoError(t, err)
+	assert.Equal(t, int64(1), runs)
+	_, _, reused, err := finalizer.classificationForAccountRetry(c, 7, stored, nil)
+	require.NoError(t, err)
+	assert.False(t, reused, "a deleted category must not be reused")
 }

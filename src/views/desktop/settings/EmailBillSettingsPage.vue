@@ -30,7 +30,7 @@
         <v-col cols="12">
             <v-window v-model="activeTab">
                 <v-window-item value="workspace" eager>
-                    <email-bill-mailbox ref="mailboxWorkspace" @active="taskActive = $event" @review="showReview" @test="testWorkspaceMessage" />
+                    <email-bill-mailbox ref="mailboxWorkspace" @active="workspaceActiveChanged" @review="showReview" @test="testWorkspaceMessage" />
                 </v-window-item>
                 <v-window-item value="mailbox">
                     <v-card :title="tt('Mailbox & Schedule')">
@@ -355,7 +355,19 @@ async function runNow(): Promise<void> {
 }
 async function showReview(): Promise<void> {
     activeTab.value = 'review';
-    try { await store.reloadCandidates(); } catch (error) { showError(error); }
+    try { await Promise.all([reloadBookkeepingOptions(), store.reloadCandidates()]); } catch (error) { showError(error); }
+}
+async function reloadBookkeepingOptions(): Promise<void> {
+    const [accountResponse, categoryResponse] = await Promise.all([services.getAllAccounts({ visibleOnly: true }), services.getAllTransactionCategories()]);
+    accounts.value = resultOf(accountResponse);
+    categories.value = Object.values(resultOf(categoryResponse)).flat();
+}
+async function workspaceActiveChanged(value: boolean): Promise<void> {
+    const finished = taskActive.value && !value;
+    taskActive.value = value;
+    if (finished) {
+        try { await Promise.all([reloadBookkeepingOptions(), store.reloadCandidates()]); } catch (error) { showError(error); }
+    }
 }
 function testWorkspaceMessage(detail: EmailBillMailboxDetail): void {
     const rule = store.parsers.find(item => item.matcher.senders.some(sender => detail.message.sender.toLowerCase().includes(sender.toLowerCase())));

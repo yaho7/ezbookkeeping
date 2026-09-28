@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 
@@ -168,7 +169,14 @@ type fakeEmailBillPipelineProcessor struct {
 }
 
 type fakeEmailBillCandidateFinalizer struct {
-	calls int
+	calls       int
+	resumeCalls int
+	resumeErr   error
+}
+
+func (f *fakeEmailBillCandidateFinalizer) ResumePending(core.Context, int64, emailbill.ScanObserver) error {
+	f.resumeCalls++
+	return f.resumeErr
 }
 
 func (f *fakeEmailBillCandidateFinalizer) FinalizeMessage(core.Context, int64, int64, int64, int64) error {
@@ -204,6 +212,32 @@ func TestEmailBillImporterUsesConfigurableParserPipeline(t *testing.T) {
 	require.Len(t, pipeline.processed, 1)
 	assert.Equal(t, "<one@example.com>", pipeline.processed[0].RemoteMessageID)
 	assert.Equal(t, 1, finalizer.calls)
+	assert.Equal(t, 1, finalizer.resumeCalls)
+}
+
+func TestEmailBillImporterResumesWithoutNewMailAndKeepsScanningAfterResumeFailure(t *testing.T) {
+	for _, newMail := range []bool{false, true} {
+		t.Run(fmt.Sprintf("newMail=%v", newMail), func(t *testing.T) {
+			config := &settings.Config{EmailBillConfig: &settings.EmailBillConfig{Enabled: true, TargetUser: "alice", Timezone: "Asia/Shanghai"}}
+			mailbox := &fakeEmailBillMailbox{}
+			if newMail {
+				mailbox.messages = []emailbill.Message{{MessageID: "new-mail", Text: "body"}}
+			}
+			pipeline := &fakeEmailBillPipelineProcessor{}
+			finalizer := &fakeEmailBillCandidateFinalizer{resumeErr: errors.New("resume failure")}
+			service := NewEmailBillImportService(&fakeEmailBillConfigProvider{config: config},
+				&fakeEmailBillUserService{user: &models.User{Uid: 7}}, &fakeEmailBillTransactionService{},
+				func(*settings.EmailBillConfig, []emailbill.Parser) emailbill.Mailbox {
+					assert.Equal(t, 1, finalizer.resumeCalls, "pending bills resume before the mailbox is opened")
+					return mailbox
+				})
+			service.automation, service.pipeline, service.finalizer = &fakeEmailBillAutomationRules{}, pipeline, finalizer
+			require.ErrorContains(t, service.Import(core.NewNullContext()), "resume failure")
+			assert.Equal(t, 1, finalizer.resumeCalls)
+			assert.Len(t, pipeline.processed, len(mailbox.messages))
+			assert.Equal(t, len(mailbox.messages), finalizer.calls)
+		})
+	}
 }
 
 func (m *fakeEmailBillMailbox) FetchRecent(context.Context) ([]emailbill.Message, error) {
