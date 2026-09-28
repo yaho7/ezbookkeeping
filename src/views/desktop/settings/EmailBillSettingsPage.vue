@@ -75,6 +75,7 @@
                                     </v-row></v-expansion-panel-text>
                                 </v-expansion-panel>
                             </v-expansion-panels>
+                            <email-bill-notification-settings v-model="settings.notification" :mail-user="settings.mailUser" :password-configured="settings.passwordConfigured" />
                         </v-card-text>
                         <v-card-actions class="px-6 pb-5"><v-spacer /><v-btn variant="tonal" :loading="testingMailbox" @click="testMailbox">{{ tt('Test Connection') }}</v-btn><v-btn color="primary" :loading="saving" :disabled="settings.folderMode === 'selected' && !settings.folders.length" @click="saveSettings">{{ tt('Save') }}</v-btn></v-card-actions>
                     </v-card>
@@ -223,9 +224,10 @@ import { isAxiosError } from 'axios';
 import SnackBar from '@/components/desktop/SnackBar.vue';
 import EmailBillMailbox from '@/components/desktop/EmailBillMailbox.vue';
 import type { EmailBillMailboxDetail } from '@/core/emailBill.ts';
+import EmailBillNotificationSettings from '@/components/desktop/EmailBillNotificationSettings.vue';
 import { useI18n } from '@/locales/helpers.ts';
 import services from '@/lib/services.ts';
-import { buildEmailBillSchedule, createEmailBillParserRule, parseEmailBillSchedule, type EmailBillClassificationRule, type EmailBillParserPreview, type EmailBillParserRule, type EmailBillRoutingRule, type EmailBillScheduleMode, type EmailBillSettings } from '@/core/emailBill.ts';
+import { buildEmailBillSchedule, createEmailBillNotificationSettings, createEmailBillParserRule, parseEmailBillSchedule, type EmailBillClassificationRule, type EmailBillParserPreview, type EmailBillParserRule, type EmailBillRoutingRule, type EmailBillScheduleMode, type EmailBillSettings } from '@/core/emailBill.ts';
 import type { AccountInfoResponse } from '@/models/account.ts';
 import type { ErrorResponse } from '@/core/api.ts';
 import type { TransactionCategoryInfoResponse } from '@/models/transaction_category.ts';
@@ -266,7 +268,7 @@ const testMessageId = ref<string | null>(null);
 const parserSenders = ref('');
 const parserSubjects = ref('');
 
-const settings = reactive<EmailBillSettings>({ folderMode: 'all', folders: [], enabled: false, imapServer: '', imapPort: 993, mailUser: '', passwordConfigured: false, timezone: 'Asia/Shanghai', cronExpression: '0 8 * * *', maxEmails: 50, retainRawEmails: false, rawEmailRetentionDays: 30 });
+const settings = reactive<EmailBillSettings>({ notification: createEmailBillNotificationSettings(), folderMode: 'all', folders: [], enabled: false, imapServer: '', imapPort: 993, mailUser: '', passwordConfigured: false, timezone: 'Asia/Shanghai', cronExpression: '0 8 * * *', maxEmails: 50, retainRawEmails: false, rawEmailRetentionDays: 30 });
 const selectableFolders = computed(() => [...new Set([...discoveredFolders.value, ...settings.folders])]);
 const folderScopeDirty = computed(() => settings.folderMode !== (store.settings?.folderMode || 'all') ||
     (settings.folderMode === 'selected' && JSON.stringify([...settings.folders].sort()) !== JSON.stringify([...(store.settings?.folders || [])].sort())));
@@ -313,7 +315,7 @@ async function loadPage(): Promise<void> {
         const [accountResponse, categoryResponse] = await Promise.all([services.getAllAccounts({ visibleOnly: true }), services.getAllTransactionCategories(), store.loadAll()]);
         accounts.value = resultOf(accountResponse);
         categories.value = Object.values(resultOf(categoryResponse)).flat();
-        if (store.settings) Object.assign(settings, { ...store.settings, folders: [...(store.settings.folders || [])] });
+        if (store.settings) Object.assign(settings, { ...store.settings, notification: { ...createEmailBillNotificationSettings(), ...store.settings.notification }, folders: [...(store.settings.folders || [])] });
         readSchedule(settings.cronExpression);
     } catch (error) { showError(error); } finally { loading.value = false; }
 }
@@ -325,7 +327,7 @@ async function saveSettings(): Promise<void> {
         settings.cronExpression = buildSchedule();
         await store.saveSettings({ ...settings, mailPassword: mailPassword.value || undefined });
         mailPassword.value = '';
-        if (store.settings) Object.assign(settings, { ...store.settings, folders: [...(store.settings.folders || [])] });
+        if (store.settings) Object.assign(settings, { ...store.settings, notification: { ...createEmailBillNotificationSettings(), ...store.settings.notification }, folders: [...(store.settings.folders || [])] });
         snackbar.value?.showMessage('Data has been updated');
     } catch (error) { showError(error); } finally { saving.value = false; }
 }

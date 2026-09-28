@@ -32,8 +32,8 @@ func NormalizeEmailBillNotification(config *EmailBillConfig, requireSending bool
 	if n.Mode == "" {
 		n.Mode = "always"
 	}
-	if n.Mode != "always" && n.Mode != "changes_or_errors" && n.Mode != "errors_only" {
-		return fmt.Errorf("Choose a notification frequency")
+	if n.Mode != "always" && n.Mode != "changes_only" && n.Mode != "changes_or_errors" && n.Mode != "errors_only" {
+		return fmt.Errorf("Choose a notification condition")
 	}
 	if n.Recipient == "" {
 		n.Recipient = config.MailUser

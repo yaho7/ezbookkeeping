@@ -84,6 +84,8 @@ func emailBillShouldNotify(task *models.EmailBillSyncTask, n *settings.EmailBill
 	}
 	failed := task.Status == "failed" || task.Failed > 0
 	switch n.Mode {
+	case "changes_only":
+		return task.Imported > 0
 	case "errors_only":
 		return failed
 	case "changes_or_errors":

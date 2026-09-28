@@ -35,8 +35,17 @@ func TestEmailBillNotificationModes(t *testing.T) {
 	assert.True(t, emailBillShouldNotify(task, n))
 	n.Mode = "errors_only"
 	assert.False(t, emailBillShouldNotify(task, n))
+	n.Mode = "changes_only"
+	assert.True(t, emailBillShouldNotify(task, n))
+	task.Imported = 0
+	assert.False(t, emailBillShouldNotify(task, n))
+	n.Mode = "errors_only"
 	task.Status = "failed"
 	assert.True(t, emailBillShouldNotify(task, n))
+	task.Status, task.Failed = "partial_success", 1
+	assert.True(t, emailBillShouldNotify(task, n))
+	n.Mode = "changes_only"
+	assert.False(t, emailBillShouldNotify(task, n))
 	n.Enabled = false
 	assert.False(t, emailBillShouldNotify(task, n))
 }

@@ -1,4 +1,5 @@
 export interface EmailBillSettings {
+    notification: EmailBillNotificationSettings;
     folderMode: 'all' | 'selected';
     folders: string[];
     enabled: boolean;
@@ -12,6 +13,25 @@ export interface EmailBillSettings {
     maxEmails: number;
     retainRawEmails: boolean;
     rawEmailRetentionDays: number;
+}
+
+export interface EmailBillNotificationSettings {
+    enabled: boolean;
+    mode: 'always' | 'changes_only' | 'changes_or_errors' | 'errors_only';
+    recipient: string;
+    smtpServer: string;
+    smtpPort: number;
+    smtpUser: string;
+    smtpPassword?: string;
+    passwordConfigured: boolean;
+    fromAddress: string;
+    useMailboxCredentials: boolean;
+}
+
+export interface EmailBillNotificationPreview { subject: string; html: string }
+
+export function createEmailBillNotificationSettings(): EmailBillNotificationSettings {
+    return { enabled: false, mode: 'always', recipient: '', smtpServer: '', smtpPort: 465, smtpUser: '', passwordConfigured: false, fromAddress: '', useMailboxCredentials: true };
 }
 
 export interface EmailBillMatcher {
@@ -45,6 +65,10 @@ export interface EmailBillMessageSample {
 }
 
 export interface EmailBillSyncTask {
+    imported?: number;
+    notificationStatus?: string;
+    notificationError?: string;
+    notificationSentUnixTime?: number;
     id: string;
     status: string;
     stage: string;

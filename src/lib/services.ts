@@ -16,7 +16,9 @@ import type {
     EmailBillParserPreview,
     EmailBillGeneratedParser,
     EmailBillRoutingRule,
-    EmailBillClassificationRule
+    EmailBillClassificationRule,
+    EmailBillNotificationSettings,
+    EmailBillNotificationPreview
 } from '@/core/emailBill.ts';
 import type { LLMSettings } from '@/core/llm.ts';
 import type {
@@ -476,6 +478,12 @@ export default {
     },
     testEmailBillSettings: (req: EmailBillSettings): ApiResponsePromise<boolean> => {
         return axios.post<ApiResponse<boolean>>('v1/users/settings/email_bill/test.json', req, { timeout: DEFAULT_LLM_API_TIMEOUT });
+    },
+    previewEmailBillNotification: (outcome: string): ApiResponsePromise<EmailBillNotificationPreview> => {
+        return axios.post<ApiResponse<EmailBillNotificationPreview>>('v1/users/settings/email_bill/notification/preview.json', { outcome });
+    },
+    testEmailBillNotification: (req: EmailBillNotificationSettings): ApiResponsePromise<{ sent: boolean; error: string }> => {
+        return axios.post<ApiResponse<{ sent: boolean; error: string }>>('v1/users/settings/email_bill/notification/test.json', req, { timeout: DEFAULT_LLM_API_TIMEOUT });
     },
     discoverEmailBillFolders: (req: EmailBillSettings): ApiResponsePromise<string[]> => {
         return axios.post<ApiResponse<string[]>>('v1/users/settings/email_bill/folders.json', req, { timeout: DEFAULT_LLM_API_TIMEOUT });

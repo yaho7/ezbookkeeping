@@ -17,6 +17,8 @@
                 <v-progress-linear class="mt-2" indeterminate color="primary" height="3" :aria-label="tt('Running in background')" />
             </div>
             <v-alert v-if="task?.errorMessage" class="mt-3" type="error" variant="tonal" density="compact">{{ tt(task.errorMessage) }}</v-alert>
+            <p v-if="notificationLabel" class="text-caption text-medium-emphasis mt-3" aria-live="polite">{{ tt(notificationLabel) }}</p>
+            <v-alert v-if="task?.notificationError" class="mt-3" type="warning" variant="tonal" density="compact">{{ tt('Email delivery failed; bookkeeping results are saved.') }} {{ tt(task.notificationError) }}</v-alert>
             <v-alert v-if="errorMessage" class="mt-3" type="warning" variant="tonal" density="compact" aria-live="polite">{{ errorMessage }}</v-alert>
         </div>
         <v-divider />
@@ -123,8 +125,11 @@ const folderOptions = computed(() => [...new Set([...(task.value?.folders || [])
 const counters = computed(() => [
     { label: 'Scanned', value: task.value?.scanned || 0 }, { label: 'Downloaded', value: task.value?.downloaded || 0 },
     { label: 'Processed', value: task.value?.processed || 0 }, { label: 'Resumed Bills', value: task.value?.resumed || 0 },
-    { label: 'Skipped', value: task.value?.skipped || 0 }, { label: 'Failed', value: task.value?.failed || 0 }
+    { label: 'Skipped', value: task.value?.skipped || 0 }, { label: 'Failed', value: task.value?.failed || 0 },
+    ...(!active.value && task.value?.notificationStatus ? [{ label: 'New Transactions', value: task.value.imported || 0 }] : [])
 ]);
+const notificationPending = computed(() => ['pending', 'sending'].includes(task.value?.notificationStatus || '') && Date.now() / 1000 - (task.value?.completedUnixTime || 0) < 300);
+const notificationLabel = computed(() => ({ pending: 'Notification queued', sending: 'Sending notification email', sent: 'Notification email sent', failed: 'Notification email failed', skipped: 'No notification for this run' }[task.value?.notificationStatus || ''] || ''));
 const labels: Record<string, string> = { ready: 'Waiting for download', downloaded: 'Downloaded', processing: 'Processing', succeeded: 'Parsed', no_output: 'No bills parsed', not_matched: 'Not Matched', rejected: 'Skipped', duplicate: 'Already processed', oversized: 'Message too large', failed: 'Failed', partial_success: 'Partially completed', not_processed: 'Not processed', imported: 'Imported', awaiting_account: 'Awaiting account', awaiting_classification: 'Awaiting classification', awaiting_confirmation: 'Awaiting confirmation', import_failed: 'Import failed', conflict: 'Conflict' };
 const stageLabels: Record<string, string> = { queued: 'Queued', resuming: 'Continuing pending bills', connecting: 'Connecting to mailbox', scanning: 'Scanning folders', processing: 'Parsing & Bookkeeping' };
 const statusOptions = computed(() => [{ title: tt('All Statuses'), value: '' }, ...['succeeded', 'no_output', 'not_matched', 'duplicate', 'oversized', 'failed', 'partial_success', 'not_processed', 'ready', 'downloaded', 'processing'].map(value => ({ title: messageStatus(value), value }))]);
@@ -202,7 +207,7 @@ async function refresh(): Promise<void> {
     finally {
         if (alive) {
             refreshing.value = false;
-            timer = setTimeout(() => { void refresh(); }, active.value ? 3000 : 15000);
+            timer = setTimeout(() => { void refresh(); }, active.value || notificationPending.value ? 3000 : 15000);
         }
     }
 }
