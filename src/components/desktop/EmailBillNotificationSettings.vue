@@ -35,6 +35,7 @@
                 <v-card-text class="notification-preview-content">
                     <v-select v-model="previewOutcome" :items="previewOutcomes" :label="tt('Preview Scenario')" density="compact" @update:model-value="loadPreview" />
                     <p class="text-caption text-medium-emphasis mb-3">{{ tt('Preview uses sample data and does not send an email.') }}</p>
+                    <v-alert v-if="previewError" class="mb-3" type="error" variant="tonal" density="compact" aria-live="polite">{{ previewError }}</v-alert>
                     <dl v-if="preview" class="notification-envelope mb-4"><div><dt>{{ tt('Sender Email') }}</dt><dd>{{ notification.fromAddress || mailUser }}</dd></div><div><dt>{{ tt('Recipient Email') }}</dt><dd>{{ notification.recipient || mailUser }}</dd></div><div><dt>{{ tt('Subject') }}</dt><dd>{{ preview.subject }}</dd></div></dl>
                     <v-progress-linear v-if="previewLoading" indeterminate color="primary" class="mb-3" :aria-label="tt('Loading...')" />
                     <iframe v-if="preview" class="notification-preview-frame" :srcdoc="preview.html" sandbox="" :title="tt('Notification Email Preview')" referrerpolicy="no-referrer" />
@@ -61,6 +62,7 @@ const feedbackType = ref<'success' | 'error'>('success');
 const previewDialog = ref(false);
 const previewOutcome = ref('succeeded');
 const previewLoading = ref(false);
+const previewError = ref('');
 const preview = ref<EmailBillNotificationPreview | null>(null);
 let previewRequest = 0;
 const frequencies = computed(() => [
@@ -76,7 +78,7 @@ const portError = computed(() => !portValid.value ? tt('Enter a port between 1 a
 const canTest = computed(() => recipientValid.value && portValid.value && Boolean(notification.value.smtpServer) && (notification.value.useMailboxCredentials ? props.passwordConfigured : Boolean(notification.value.smtpPassword || notification.value.passwordConfigured)));
 
 watch(() => notification.value.enabled, enabled => { if (enabled && !notification.value.smtpServer) advancedPanel.value = 0; });
-watch(() => notification.value.useMailboxCredentials, reuse => { if (reuse) notification.value.smtpUser = props.mailUser; });
+watch(() => [notification.value.useMailboxCredentials, props.mailUser] as const, ([reuse, mailUser]) => { if (reuse) notification.value.smtpUser = mailUser; });
 
 function errorText(error: unknown): string {
     const message = isAxiosError<{ errorMessage?: string }>(error) ? error.response?.data?.errorMessage : undefined;
@@ -95,12 +97,12 @@ async function sendTest(): Promise<void> {
 async function openPreview(): Promise<void> { previewDialog.value = true; await loadPreview(); }
 async function loadPreview(): Promise<void> {
     const request = ++previewRequest;
-    previewLoading.value = true;
+    previewLoading.value = true; previewError.value = ''; preview.value = null;
     try {
         const response = await services.previewEmailBillNotification(previewOutcome.value);
         if (!response.data.success) throw new Error('Email bill request failed');
         if (request === previewRequest) preview.value = response.data.result;
-    } catch (error) { if (request === previewRequest) { feedbackType.value = 'error'; feedback.value = errorText(error); } }
+    } catch (error) { if (request === previewRequest) previewError.value = errorText(error); }
     finally { if (request === previewRequest) previewLoading.value = false; }
 }
 </script>
