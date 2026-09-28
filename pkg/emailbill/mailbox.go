@@ -49,6 +49,7 @@ type IMAPMailbox struct {
 	folder        string
 	uidValidity   uint32
 	matchers      []ParserMatcher
+	connection    net.Conn
 }
 
 // NewIMAPMailbox creates a read-only IMAP mailbox client.
@@ -168,14 +169,8 @@ func (m *IMAPMailbox) fetchFolder(ctx context.Context, imapClient *client.Client
 		messageDates = newestMessageDates(messageDates, remaining)
 		messages, err := m.fetchMessageBodies(ctx, imapClient, sortedUIDs(messageDates), messageDates)
 		// No IMAP response channel is active while parsing or calling the LLM.
-		if m.handler != nil {
-			for index, message := range messages {
-				if err := m.handler(message); err != nil {
-					return nil, err
-				}
-				// Preserve the global count without retaining every downloaded body.
-				messages[index].Text, messages[index].Headers = "", nil
-			}
+		if processErr := m.processDownloadedMessages(ctx, messages); processErr != nil {
+			return nil, processErr
 		}
 		return messages, err
 	})
@@ -187,6 +182,31 @@ func (m *IMAPMailbox) fetchFolder(ctx context.Context, imapClient *client.Client
 		outcome = "limited"
 	}
 	return messages, m.report(ScanEvent{Kind: "folder", Folder: folder, Status: outcome})
+}
+
+func (m *IMAPMailbox) processDownloadedMessages(ctx context.Context, messages []Message) error {
+	if m.handler == nil {
+		return nil
+	}
+	// go-imap leaves the last command's socket deadline in place. Its reader
+	// remains active between commands, so AI processing would otherwise close
+	// a healthy connection after 30 seconds. The next command restores Timeout.
+	if m.connection != nil {
+		if err := m.connection.SetDeadline(time.Time{}); err != nil {
+			return fmt.Errorf("clear IMAP idle deadline: %w", err)
+		}
+	}
+	for index, message := range messages {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		if err := m.handler(message); err != nil {
+			return err
+		}
+		// Preserve the global count without retaining every downloaded body.
+		messages[index].Text, messages[index].Headers = "", nil
+	}
+	return nil
 }
 
 func listMailboxFolders(imapClient *client.Client) ([]string, error) {
@@ -284,12 +304,32 @@ func (m *IMAPMailbox) openInbox(ctx context.Context) (*client.Client, error) {
 	return imapClient, nil
 }
 
+// Retain the transport so completed commands can relinquish their deadlines
+// without changing go-imap's TLS setup or timeout for active commands.
+type emailBillIMAPDialer struct {
+	net.Dialer
+	connection net.Conn
+}
+
+func (d *emailBillIMAPDialer) Dial(network, address string) (net.Conn, error) {
+	connection, err := d.Dialer.Dial(network, address)
+	if err != nil {
+		return nil, err
+	}
+	if err := connection.SetDeadline(time.Now().Add(d.Timeout)); err != nil {
+		_ = connection.Close()
+		return nil, err
+	}
+	d.connection = connection
+	return connection, nil
+}
+
 func (m *IMAPMailbox) openConnection(ctx context.Context) (*client.Client, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
 	address := net.JoinHostPort(m.config.Server, strconv.FormatUint(uint64(m.config.Port), 10))
-	dialer := &net.Dialer{Timeout: defaultIMAPTimeout}
+	dialer := &emailBillIMAPDialer{Dialer: net.Dialer{Timeout: defaultIMAPTimeout}}
 	imapClient, err := client.DialWithDialerTLS(dialer, address, &tls.Config{
 		MinVersion: tls.VersionTLS12,
 		ServerName: m.config.Server,
@@ -297,6 +337,7 @@ func (m *IMAPMailbox) openConnection(ctx context.Context) (*client.Client, error
 	if err != nil {
 		return nil, fmt.Errorf("connect to IMAP server: %w", err)
 	}
+	m.connection = dialer.connection
 	imapClient.Timeout = defaultIMAPTimeout
 
 	if err = imapClient.Login(m.config.Username, m.config.Password); err != nil {
