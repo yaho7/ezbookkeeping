@@ -34,4 +34,6 @@ func TestEmailBillNotificationRejectsHeaderInjectionAndMissingCredentials(t *tes
 	c.Notification.UseMailboxCredentials, c.Notification.FromName = true, "账单\r\nBcc: attacker@example.com"
 	c.MailPassword = "secret"
 	require.ErrorContains(t, NormalizeEmailBillNotification(c, false), "sender name")
+	c.Notification.FromName, c.Notification.Subject = "账单助手", "账单\r\nBcc: attacker@example.com"
+	require.ErrorContains(t, NormalizeEmailBillNotification(c, false), "notification subject")
 }

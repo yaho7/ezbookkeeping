@@ -3010,5 +3010,8 @@
     "Sender Name": "寄件名稱",
     "Defaults to ezBookkeeping.": "留空時使用 ezBookkeeping。",
     "Enter a valid sender name": "請輸入有效的寄件名稱",
-    "Subject": "主旨"
+    "Subject": "主旨",
+    "Notification Subject": "郵件主旨",
+    "Defaults to a result-specific subject.": "留空時依執行結果自動產生主旨。",
+    "Enter a valid notification subject": "請輸入有效的郵件主旨"
 }

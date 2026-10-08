@@ -18,6 +18,7 @@ type EmailBillNotificationConfig struct {
 	SMTPPassword          string
 	FromAddress           string
 	FromName              string
+	Subject               string
 	UseMailboxCredentials bool
 }
 
@@ -31,6 +32,7 @@ func NormalizeEmailBillNotification(config *EmailBillConfig, requireSending bool
 	n.SMTPServer, n.SMTPUser = strings.TrimSpace(n.SMTPServer), strings.TrimSpace(n.SMTPUser)
 	n.FromAddress = strings.TrimSpace(n.FromAddress)
 	n.FromName = strings.TrimSpace(n.FromName)
+	n.Subject = strings.TrimSpace(n.Subject)
 	if n.Mode == "" {
 		n.Mode = "always"
 	}
@@ -80,6 +82,9 @@ func NormalizeEmailBillNotification(config *EmailBillConfig, requireSending bool
 	}
 	if len([]rune(n.FromName)) > 100 || strings.ContainsAny(n.FromName, "\x00\r\n") {
 		return fmt.Errorf("Enter a valid sender name")
+	}
+	if len([]rune(n.Subject)) > 120 || strings.ContainsAny(n.Subject, "\x00\r\n") {
+		return fmt.Errorf("Enter a valid notification subject")
 	}
 	if n.SMTPServer == "" || strings.ContainsAny(n.SMTPServer, " /\\@\x00\r\n") || (strings.Contains(n.SMTPServer, ":") && net.ParseIP(n.SMTPServer) == nil) {
 		return fmt.Errorf("Enter an SMTP server hostname")

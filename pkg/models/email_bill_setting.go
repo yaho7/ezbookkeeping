@@ -44,6 +44,7 @@ type EmailBillNotificationSettingsResponse struct {
 	PasswordConfigured    bool   `json:"passwordConfigured"`
 	FromAddress           string `json:"fromAddress"`
 	FromName              string `json:"fromName"`
+	Subject               string `json:"subject"`
 	UseMailboxCredentials bool   `json:"useMailboxCredentials"`
 }
 
@@ -57,5 +58,6 @@ type EmailBillNotificationSettingsRequest struct {
 	SMTPPassword          string `json:"smtpPassword" binding:"max=4096"`
 	FromAddress           string `json:"fromAddress" binding:"max=254"`
 	FromName              string `json:"fromName" binding:"max=400"`
+	Subject               string `json:"subject" binding:"max=480"`
 	UseMailboxCredentials bool   `json:"useMailboxCredentials"`
 }

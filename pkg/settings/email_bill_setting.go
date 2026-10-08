@@ -46,6 +46,7 @@ func SaveEmailBillConfiguration(configFilePath string, config *EmailBillConfig) 
 			values["notification_smtp_password"] = n.SMTPPassword
 			values["notification_from_address"] = n.FromAddress
 			values["notification_from_name"] = n.FromName
+			values["notification_subject"] = n.Subject
 			values["notification_use_mailbox_credentials"] = strconv.FormatBool(n.UseMailboxCredentials)
 		}
 		for key, value := range values {

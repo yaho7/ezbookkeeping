@@ -137,7 +137,11 @@ func (s *EmailBillNotificationService) send(config *settings.EmailBillConfig, pr
 	if err != nil {
 		return err
 	}
-	return m.SendMail(&mail.MailMessage{To: resolved.Notification.Recipient, Subject: preview.Subject, Body: preview.HTML})
+	subject := preview.Subject
+	if resolved.Notification.Subject != "" {
+		subject = resolved.Notification.Subject
+	}
+	return m.SendMail(&mail.MailMessage{To: resolved.Notification.Recipient, Subject: subject, Body: preview.HTML})
 }
 
 func (s *EmailBillNotificationService) Test(config *settings.EmailBillConfig, rootURL, locale string) error {
@@ -248,7 +252,7 @@ func (s *EmailBillNotificationService) Preview(rootURL, locale, outcome string) 
 		task.Imported = 0
 	}
 	d := emailBillNotificationBase(task, rootURL, locale)
-	d.Time, d.Duration, d.Folders = "2026-09-28 08:00", "1m 12s", []string{d.Copy["sampleFolder"]}
+	d.Time, d.Duration, d.Folders = time.Now().Format("2006-01-02 15:04 MST"), "1m 12s", []string{d.Copy["sampleFolder"]}
 	if task.Imported > 0 {
 		d.Uncategorized = 1
 		d.Currencies = []emailBillNotificationCurrency{{Currency: "CNY", ExpenseText: "186.50", IncomeText: "0.00"}}
@@ -281,18 +285,18 @@ func emailBillNotificationCopy(locale string) map[string]string {
 		"success": "Completed", "attention": "Needs attention", "completed": "Your email bills are recorded", "failedTitle": "Email bookkeeping needs attention",
 		"description": "New transactions from this run have been saved to your accounts.", "failedDescription": "Successful entries are saved. Open the email workspace to inspect the remaining errors.",
 		"empty": "No new transactions. Previously processed emails are skipped automatically.", "imported": "New transactions", "scanned": "Emails scanned", "failed": "Failed emails", "uncategorized": "Uncategorized",
-		"expense": "Expenses", "income": "Income and refunds", "entries": "Recent entries from this run", "merchant": "Merchant and category", "amount": "Amount", "more": "Open the workspace for all entries.",
+		"expense": "Expenses", "income": "Income and refunds", "entries": "Recent entries from this run", "merchant": "Merchant and category", "amount": "Amount", "more": "Open the workspace for all entries.", "runTime": "Run time",
 		"fallback": "Low-confidence classifications were recorded as Uncategorized. You can edit their categories in your accounts.", "error": "What needs attention", "open": "Open email workspace", "folder": "Folders", "duration": "Duration",
 		"footer": "This email summarizes one run. Transaction dates come from the original bills.", "testTitle": "Email notifications are connected", "testDescription": "This is a test email. No scan or bookkeeping changes were made.",
 		"sampleFolder": "Bills", "sampleMerchant": "Sample restaurant", "sampleMerchant2": "Sample transport", "sampleCategory": "Dining", "sampleError": "The mailbox connection timed out. Completed entries are safe; run again to continue.",
 	}
 	if strings.HasPrefix(locale, "zh") {
-		for k, v := range map[string]string{"success": "已完成", "attention": "需要处理", "completed": "本次邮件账单已入账", "failedTitle": "邮件记账尚未全部完成", "description": "本次新增账单已保存，可在账目中查看和修改。", "failedDescription": "已成功入账的记录已保存。请打开邮件工作台查看未完成项。", "empty": "本次没有新增账单，已处理的邮件会自动跳过。", "imported": "新增账目", "scanned": "扫描邮件", "failed": "处理失败", "uncategorized": "未分类", "expense": "支出", "income": "收入与退款", "entries": "本次新增账目摘要", "merchant": "商户与分类", "amount": "金额", "more": "完整账目请到邮件工作台查看。", "fallback": "分类置信度不足的账单已计入未分类，可在账目中修改分类。", "error": "需要处理的问题", "open": "打开邮件工作台", "folder": "扫描目录", "duration": "用时", "footer": "本通知仅汇总本次运行，账目日期以原始账单为准。", "testTitle": "邮件通知连接成功", "testDescription": "这是一封测试邮件，没有执行扫描，也没有修改账目。", "sampleFolder": "账单", "sampleMerchant": "示例餐厅", "sampleMerchant2": "示例公交", "sampleCategory": "餐饮", "sampleError": "邮箱连接超时。已入账的记录已保存，再次运行即可继续。"} {
+		for k, v := range map[string]string{"success": "已完成", "attention": "需要处理", "completed": "本次邮件账单已入账", "failedTitle": "邮件记账尚未全部完成", "description": "本次新增账单已保存，可在账目中查看和修改。", "failedDescription": "已成功入账的记录已保存。请打开邮件工作台查看未完成项。", "empty": "本次没有新增账单，已处理的邮件会自动跳过。", "imported": "新增账目", "scanned": "扫描邮件", "failed": "处理失败", "uncategorized": "未分类", "expense": "支出", "income": "收入与退款", "entries": "本次新增账目摘要", "merchant": "商户与分类", "amount": "金额", "more": "完整账目请到邮件工作台查看。", "fallback": "分类置信度不足的账单已计入未分类，可在账目中修改分类。", "error": "需要处理的问题", "open": "打开邮件工作台", "folder": "扫描目录", "duration": "用时", "runTime": "运行时间", "footer": "本通知仅汇总本次运行，账目日期以原始账单为准。", "testTitle": "邮件通知连接成功", "testDescription": "这是一封测试邮件，没有执行扫描，也没有修改账目。", "sampleFolder": "账单", "sampleMerchant": "示例餐厅", "sampleMerchant2": "示例公交", "sampleCategory": "餐饮", "sampleError": "邮箱连接超时。已入账的记录已保存，再次运行即可继续。"} {
 			c[k] = v
 		}
 	}
 	if strings.Contains(locale, "Hant") || strings.Contains(locale, "TW") {
-		for k, v := range map[string]string{"success": "已完成", "attention": "需要處理", "completed": "本次郵件帳單已入帳", "failedTitle": "郵件記帳尚未全部完成", "description": "本次新增帳單已儲存，可在帳目中查看和修改。", "failedDescription": "已成功入帳的記錄已儲存。請開啟郵件工作台查看未完成項。", "empty": "本次沒有新增帳單，已處理的郵件會自動略過。", "imported": "新增帳目", "scanned": "掃描郵件", "failed": "處理失敗", "uncategorized": "未分類", "expense": "支出", "income": "收入與退款", "entries": "本次新增帳目摘要", "merchant": "商戶與分類", "amount": "金額", "more": "完整帳目請到郵件工作台查看。", "fallback": "分類信心不足的帳單已計入未分類，可在帳目中修改分類。", "error": "需要處理的問題", "open": "開啟郵件工作台", "folder": "掃描目錄", "duration": "用時", "footer": "本通知僅彙總本次執行，帳目日期以原始帳單為準。", "testTitle": "郵件通知連線成功", "testDescription": "這是一封測試郵件，沒有執行掃描，也沒有修改帳目。", "sampleFolder": "帳單", "sampleMerchant": "示例餐廳", "sampleMerchant2": "示例公車", "sampleCategory": "餐飲", "sampleError": "信箱連線逾時。已入帳的記錄已儲存，再次執行即可繼續。"} {
+		for k, v := range map[string]string{"success": "已完成", "attention": "需要處理", "completed": "本次郵件帳單已入帳", "failedTitle": "郵件記帳尚未全部完成", "description": "本次新增帳單已儲存，可在帳目中查看和修改。", "failedDescription": "已成功入帳的記錄已儲存。請開啟郵件工作台查看未完成項。", "empty": "本次沒有新增帳單，已處理的郵件會自動略過。", "imported": "新增帳目", "scanned": "掃描郵件", "failed": "處理失敗", "uncategorized": "未分類", "expense": "支出", "income": "收入與退款", "entries": "本次新增帳目摘要", "merchant": "商戶與分類", "amount": "金額", "more": "完整帳目請到郵件工作台查看。", "fallback": "分類信心不足的帳單已計入未分類，可在帳目中修改分類。", "error": "需要處理的問題", "open": "開啟郵件工作台", "folder": "掃描目錄", "duration": "用時", "runTime": "執行時間", "footer": "本通知僅彙總本次執行，帳目日期以原始帳單為準。", "testTitle": "郵件通知連線成功", "testDescription": "這是一封測試郵件，沒有執行掃描，也沒有修改帳目。", "sampleFolder": "帳單", "sampleMerchant": "示例餐廳", "sampleMerchant2": "示例公車", "sampleCategory": "餐飲", "sampleError": "信箱連線逾時。已入帳的記錄已儲存，再次執行即可繼續。"} {
 			c[k] = v
 		}
 	}

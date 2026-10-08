@@ -3109,5 +3109,8 @@
     "Sender Name": "发件名称",
     "Defaults to ezBookkeeping.": "留空时使用 ezBookkeeping。",
     "Enter a valid sender name": "请输入有效的发件名称",
-    "Subject": "主题"
+    "Subject": "主题",
+    "Notification Subject": "邮件主题",
+    "Defaults to a result-specific subject.": "留空时按运行结果自动生成主题。",
+    "Enter a valid notification subject": "请输入有效的邮件主题"
 }

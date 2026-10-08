@@ -1092,6 +1092,7 @@ func loadEmailBillConfiguration(config *Config, configFile *ini.File, sectionNam
 		SMTPPassword:          getConfigItemStringValue(configFile, sectionName, "notification_smtp_password"),
 		FromAddress:           getConfigItemStringValue(configFile, sectionName, "notification_from_address"),
 		FromName:              getConfigItemStringValue(configFile, sectionName, "notification_from_name"),
+		Subject:               getConfigItemStringValue(configFile, sectionName, "notification_subject"),
 		UseMailboxCredentials: getConfigItemBoolValue(configFile, sectionName, "notification_use_mailbox_credentials", true),
 	}
 	if err := json.Unmarshal([]byte(getConfigItemStringValue(configFile, sectionName, "folders", "[]")), &emailBillConfig.Folders); err != nil {

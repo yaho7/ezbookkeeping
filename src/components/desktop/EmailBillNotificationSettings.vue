@@ -7,6 +7,7 @@
         <v-row class="mt-2">
             <v-col cols="12" md="7"><v-text-field v-model.trim="notification.recipient" type="email" autocomplete="email" :label="tt('Recipient Email')" :placeholder="mailUser" :error-messages="recipientError" :hint="tt('Defaults to your connected mailbox.')" persistent-hint /></v-col>
             <v-col cols="12" md="5"><v-select v-model="notification.mode" :label="tt('Notify When')" :items="frequencies" /></v-col>
+            <v-col cols="12"><v-text-field v-model.trim="notification.subject" :label="tt('Notification Subject')" :hint="tt('Defaults to a result-specific subject.')" :error-messages="subjectError" maxlength="120" persistent-hint /></v-col>
         </v-row>
         <v-expansion-panels v-model="advancedPanel" variant="accordion" class="mt-2">
             <v-expansion-panel :title="tt('Sending Mailbox')">
@@ -37,7 +38,7 @@
                     <v-select v-model="previewOutcome" :items="previewOutcomes" :label="tt('Preview Scenario')" density="compact" @update:model-value="loadPreview" />
                     <p class="text-caption text-medium-emphasis mb-3">{{ tt('Preview uses sample data and does not send an email.') }}</p>
                     <v-alert v-if="previewError" class="mb-3" type="error" variant="tonal" density="compact" aria-live="polite">{{ previewError }}</v-alert>
-                    <dl v-if="preview" class="notification-envelope mb-4"><div><dt>{{ tt('Sender Email') }}</dt><dd>{{ senderLabel }}</dd></div><div><dt>{{ tt('Recipient Email') }}</dt><dd>{{ notification.recipient || mailUser }}</dd></div><div><dt>{{ tt('Subject') }}</dt><dd>{{ preview.subject }}</dd></div></dl>
+                    <dl v-if="preview" class="notification-envelope mb-4"><div><dt>{{ tt('Sender Email') }}</dt><dd>{{ senderLabel }}</dd></div><div><dt>{{ tt('Recipient Email') }}</dt><dd>{{ notification.recipient || mailUser }}</dd></div><div><dt>{{ tt('Subject') }}</dt><dd>{{ notification.subject?.trim() || preview.subject }}</dd></div></dl>
                     <v-progress-linear v-if="previewLoading" indeterminate color="primary" class="mb-3" :aria-label="tt('Loading...')" />
                     <iframe v-if="preview" class="notification-preview-frame" :srcdoc="preview.html" sandbox="" :title="tt('Notification Email Preview')" referrerpolicy="no-referrer" />
                 </v-card-text>
@@ -74,6 +75,7 @@ const previewOutcomes = computed(() => [
 ]);
 const recipientValid = computed(() => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(notification.value.recipient || props.mailUser));
 const recipientError = computed(() => notification.value.enabled && !recipientValid.value ? tt('Enter a valid recipient email') : '');
+const subjectError = computed(() => notification.value.enabled && /[\r\n\x00]/.test(notification.value.subject) ? tt('Enter a valid notification subject') : '');
 const portValid = computed(() => Number.isInteger(notification.value.smtpPort) && notification.value.smtpPort > 0 && notification.value.smtpPort <= 65535);
 const portError = computed(() => !portValid.value ? tt('Enter a port between 1 and 65535') : '');
 const canTest = computed(() => recipientValid.value && portValid.value && Boolean(notification.value.smtpServer) && (notification.value.useMailboxCredentials ? props.passwordConfigured : Boolean(notification.value.smtpPassword || notification.value.passwordConfigured)));

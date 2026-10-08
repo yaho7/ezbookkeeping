@@ -226,7 +226,7 @@ func buildEmailBillNotificationConfig(request *models.EmailBillNotificationSetti
 	if password == "" && current != nil && strings.EqualFold(strings.TrimSpace(request.SMTPServer), current.SMTPServer) && request.SMTPPort == current.SMTPPort && strings.TrimSpace(request.SMTPUser) == current.SMTPUser {
 		password = current.SMTPPassword
 	}
-	return &settings.EmailBillNotificationConfig{Enabled: request.Enabled, Mode: request.Mode, Recipient: request.Recipient, SMTPServer: request.SMTPServer, SMTPPort: request.SMTPPort, SMTPUser: request.SMTPUser, SMTPPassword: password, FromAddress: request.FromAddress, FromName: request.FromName, UseMailboxCredentials: request.UseMailboxCredentials}
+	return &settings.EmailBillNotificationConfig{Enabled: request.Enabled, Mode: request.Mode, Recipient: request.Recipient, SMTPServer: request.SMTPServer, SMTPPort: request.SMTPPort, SMTPUser: request.SMTPUser, SMTPPassword: password, FromAddress: request.FromAddress, FromName: request.FromName, Subject: request.Subject, UseMailboxCredentials: request.UseMailboxCredentials}
 }
 
 func emailBillSettingsResponse(config *settings.EmailBillConfig) *models.EmailBillSettingsResponse {
@@ -242,7 +242,7 @@ func emailBillSettingsResponse(config *settings.EmailBillConfig) *models.EmailBi
 		mode = "all"
 	}
 	return &models.EmailBillSettingsResponse{
-		Notification: &models.EmailBillNotificationSettingsResponse{Enabled: n.Enabled, Mode: n.Mode, Recipient: n.Recipient, SMTPServer: n.SMTPServer, SMTPPort: n.SMTPPort, SMTPUser: n.SMTPUser, PasswordConfigured: n.SMTPPassword != "", FromAddress: n.FromAddress, FromName: n.FromName, UseMailboxCredentials: n.UseMailboxCredentials},
+		Notification: &models.EmailBillNotificationSettingsResponse{Enabled: n.Enabled, Mode: n.Mode, Recipient: n.Recipient, SMTPServer: n.SMTPServer, SMTPPort: n.SMTPPort, SMTPUser: n.SMTPUser, PasswordConfigured: n.SMTPPassword != "", FromAddress: n.FromAddress, FromName: n.FromName, Subject: n.Subject, UseMailboxCredentials: n.UseMailboxCredentials},
 		FolderMode:   mode, Folders: append([]string{}, config.Folders...),
 		Enabled:               config.Enabled,
 		IMAPServer:            config.IMAPServer,

@@ -3109,5 +3109,8 @@
     "Sender Name": "Sender Name",
     "Defaults to ezBookkeeping.": "Defaults to ezBookkeeping.",
     "Enter a valid sender name": "Enter a valid sender name",
-    "Subject": "Subject"
+    "Subject": "Subject",
+    "Notification Subject": "Notification Subject",
+    "Defaults to a result-specific subject.": "Defaults to a result-specific subject.",
+    "Enter a valid notification subject": "Enter a valid notification subject"
 }

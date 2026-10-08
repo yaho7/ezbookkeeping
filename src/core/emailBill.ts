@@ -26,13 +26,14 @@ export interface EmailBillNotificationSettings {
     passwordConfigured: boolean;
     fromAddress: string;
     fromName: string;
+    subject: string;
     useMailboxCredentials: boolean;
 }
 
 export interface EmailBillNotificationPreview { subject: string; html: string }
 
 export function createEmailBillNotificationSettings(): EmailBillNotificationSettings {
-    return { enabled: false, mode: 'always', recipient: '', smtpServer: '', smtpPort: 465, smtpUser: '', passwordConfigured: false, fromAddress: '', fromName: 'ezBookkeeping', useMailboxCredentials: true };
+    return { enabled: false, mode: 'always', recipient: '', smtpServer: '', smtpPort: 465, smtpUser: '', passwordConfigured: false, fromAddress: '', fromName: 'ezBookkeeping', subject: '', useMailboxCredentials: true };
 }
 
 export interface EmailBillMatcher {

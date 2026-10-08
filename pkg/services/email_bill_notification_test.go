@@ -11,6 +11,7 @@ import (
 	"github.com/mayswind/ezbookkeeping/pkg/settings"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"strings"
 	"testing"
 	"time"
 )
@@ -82,7 +83,7 @@ func TestEmailBillNotificationClaimsDeliveryOnceAndFailureDoesNotChangeLedger(t 
 			count, err := service.ImportedCount(c, task)
 			require.NoError(t, err)
 			assert.Equal(t, int64(1), count)
-			config := &settings.EmailBillConfig{MailUser: "alice@qq.com", MailPassword: "mail-secret", Timezone: "Asia/Shanghai", Notification: &settings.EmailBillNotificationConfig{Enabled: true, Mode: "always", UseMailboxCredentials: true, SMTPPassword: "smtp-secret", FromName: "账单助手"}}
+			config := &settings.EmailBillConfig{MailUser: "alice@qq.com", MailPassword: "mail-secret", Timezone: "Asia/Shanghai", Notification: &settings.EmailBillNotificationConfig{Enabled: true, Mode: "always", UseMailboxCredentials: true, SMTPPassword: "smtp-secret", FromName: "账单助手", Subject: "我的账单通知"}}
 			err = service.Notify(c, task, config, "https://example.com", "zh-Hans")
 			if failure {
 				require.Error(t, err)
@@ -91,6 +92,7 @@ func TestEmailBillNotificationClaimsDeliveryOnceAndFailureDoesNotChangeLedger(t 
 			}
 			require.NoError(t, service.Notify(c, task, config, "https://example.com", "zh-Hans"))
 			require.Len(t, fake.messages, 1)
+			assert.Equal(t, "我的账单通知", fake.messages[0].Subject)
 			assert.Contains(t, fake.messages[0].Body, "&lt;img")
 			assert.NotContains(t, fake.messages[0].Body, "<img src=x")
 			stored := &models.EmailBillSyncTask{}
@@ -106,6 +108,23 @@ func TestEmailBillNotificationClaimsDeliveryOnceAndFailureDoesNotChangeLedger(t 
 			account, err := Accounts.GetAccountByAccountId(c, 7, accountID)
 			require.NoError(t, err)
 			assert.Equal(t, int64(-1234), account.Balance)
+		})
+	}
+}
+
+func TestEmailBillNotificationPreviewPlacesRunTimeAtEnd(t *testing.T) {
+	t.Chdir("../..")
+	for _, outcome := range []string{"succeeded", "failed", "empty"} {
+		t.Run(outcome, func(t *testing.T) {
+			preview, err := EmailBillNotifications.Preview("https://example.com", "zh-Hans", outcome)
+			require.NoError(t, err)
+			assert.NotContains(t, preview.HTML, ">ezBookkeeping</strong>")
+			body := strings.SplitN(preview.HTML, "<body", 2)
+			require.Len(t, body, 2)
+			require.Contains(t, body[1], "本通知仅汇总本次运行")
+			require.Contains(t, body[1], "运行时间:")
+			assert.Greater(t, strings.Index(body[1], "运行时间:"), strings.Index(body[1], "本通知仅汇总本次运行"))
+			assert.Contains(t, preview.Subject, "[ezBookkeeping]")
 		})
 	}
 }
