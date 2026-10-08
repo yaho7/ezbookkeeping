@@ -75,11 +75,14 @@ func TestEmailBillNotificationClaimsDeliveryOnceAndFailureDoesNotChangeLedger(t 
 			if failure {
 				fake.err = errors.New("SMTP rejected mail-secret and smtp-secret")
 			}
-			service := &EmailBillNotificationService{ServiceUsingDB: ServiceUsingDB{container: datastore.Container}, newMailer: func(*settings.SMTPConfig) (mail.Mailer, error) { return fake, nil }}
+			service := &EmailBillNotificationService{ServiceUsingDB: ServiceUsingDB{container: datastore.Container}, newMailer: func(smtp *settings.SMTPConfig) (mail.Mailer, error) {
+				assert.Equal(t, "账单助手", smtp.FromName)
+				return fake, nil
+			}}
 			count, err := service.ImportedCount(c, task)
 			require.NoError(t, err)
 			assert.Equal(t, int64(1), count)
-			config := &settings.EmailBillConfig{MailUser: "alice@qq.com", MailPassword: "mail-secret", Timezone: "Asia/Shanghai", Notification: &settings.EmailBillNotificationConfig{Enabled: true, Mode: "always", UseMailboxCredentials: true, SMTPPassword: "smtp-secret"}}
+			config := &settings.EmailBillConfig{MailUser: "alice@qq.com", MailPassword: "mail-secret", Timezone: "Asia/Shanghai", Notification: &settings.EmailBillNotificationConfig{Enabled: true, Mode: "always", UseMailboxCredentials: true, SMTPPassword: "smtp-secret", FromName: "账单助手"}}
 			err = service.Notify(c, task, config, "https://example.com", "zh-Hans")
 			if failure {
 				require.Error(t, err)

@@ -3105,5 +3105,9 @@
     "Save the mailbox password before enabling notifications": "Save the mailbox password before enabling notifications",
     "Enter the SMTP password or reuse the mailbox password": "Enter the SMTP password or reuse the mailbox password",
     "Choose a notification condition": "Choose a notification condition",
-    "Cannot read the notification summary": "Cannot read the notification summary"
+    "Cannot read the notification summary": "Cannot read the notification summary",
+    "Sender Name": "Sender Name",
+    "Defaults to ezBookkeeping.": "Defaults to ezBookkeeping.",
+    "Enter a valid sender name": "Enter a valid sender name",
+    "Subject": "Subject"
 }

@@ -19,12 +19,13 @@
                         <v-col cols="12" md="6"><v-text-field v-model.trim="notification.smtpUser" :disabled="notification.useMailboxCredentials" :label="tt('SMTP Username')" :placeholder="mailUser" /></v-col>
                         <v-col cols="12" md="6" v-if="!notification.useMailboxCredentials"><v-text-field v-model="notification.smtpPassword" type="password" autocomplete="new-password" :label="tt('SMTP Password')" :placeholder="notification.passwordConfigured ? tt('Saved; leave blank to keep') : ''" /></v-col>
                         <v-col cols="12" md="6"><v-text-field v-model.trim="notification.fromAddress" type="email" :label="tt('Sender Email')" :placeholder="mailUser" /></v-col>
+                        <v-col cols="12" md="6"><v-text-field v-model.trim="notification.fromName" :label="tt('Sender Name')" placeholder="ezBookkeeping" :hint="tt('Defaults to ezBookkeeping.')" maxlength="100" persistent-hint /></v-col>
                     </v-row>
                 </v-expansion-panel-text>
             </v-expansion-panel>
         </v-expansion-panels>
         <div class="notification-actions d-flex align-center justify-space-between flex-wrap ga-3 mt-4">
-            <div class="text-body-2 text-medium-emphasis">{{ tt('Sender Email') }}: {{ notification.fromAddress || mailUser || tt('Not configured') }}<span v-if="notification.useMailboxCredentials && passwordConfigured" class="d-block text-caption mt-1">{{ tt('Uses the saved mailbox password.') }}</span></div>
+            <div class="text-body-2 text-medium-emphasis">{{ tt('Sender Email') }}: {{ senderLabel }}<span v-if="notification.useMailboxCredentials && passwordConfigured" class="d-block text-caption mt-1">{{ tt('Uses the saved mailbox password.') }}</span></div>
             <div class="d-flex flex-wrap ga-2"><v-btn variant="text" @click="openPreview">{{ tt('Preview Notification Email') }}</v-btn><v-btn variant="tonal" :loading="testing" :disabled="!canTest" @click="sendTest">{{ tt('Send Test Email') }}</v-btn></div>
         </div>
         <v-alert v-if="feedback" class="mt-3" :type="feedbackType" variant="tonal" density="compact" aria-live="polite">{{ feedback }}</v-alert>
@@ -36,7 +37,7 @@
                     <v-select v-model="previewOutcome" :items="previewOutcomes" :label="tt('Preview Scenario')" density="compact" @update:model-value="loadPreview" />
                     <p class="text-caption text-medium-emphasis mb-3">{{ tt('Preview uses sample data and does not send an email.') }}</p>
                     <v-alert v-if="previewError" class="mb-3" type="error" variant="tonal" density="compact" aria-live="polite">{{ previewError }}</v-alert>
-                    <dl v-if="preview" class="notification-envelope mb-4"><div><dt>{{ tt('Sender Email') }}</dt><dd>{{ notification.fromAddress || mailUser }}</dd></div><div><dt>{{ tt('Recipient Email') }}</dt><dd>{{ notification.recipient || mailUser }}</dd></div><div><dt>{{ tt('Subject') }}</dt><dd>{{ preview.subject }}</dd></div></dl>
+                    <dl v-if="preview" class="notification-envelope mb-4"><div><dt>{{ tt('Sender Email') }}</dt><dd>{{ senderLabel }}</dd></div><div><dt>{{ tt('Recipient Email') }}</dt><dd>{{ notification.recipient || mailUser }}</dd></div><div><dt>{{ tt('Subject') }}</dt><dd>{{ preview.subject }}</dd></div></dl>
                     <v-progress-linear v-if="previewLoading" indeterminate color="primary" class="mb-3" :aria-label="tt('Loading...')" />
                     <iframe v-if="preview" class="notification-preview-frame" :srcdoc="preview.html" sandbox="" :title="tt('Notification Email Preview')" referrerpolicy="no-referrer" />
                 </v-card-text>
@@ -76,6 +77,10 @@ const recipientError = computed(() => notification.value.enabled && !recipientVa
 const portValid = computed(() => Number.isInteger(notification.value.smtpPort) && notification.value.smtpPort > 0 && notification.value.smtpPort <= 65535);
 const portError = computed(() => !portValid.value ? tt('Enter a port between 1 and 65535') : '');
 const canTest = computed(() => recipientValid.value && portValid.value && Boolean(notification.value.smtpServer) && (notification.value.useMailboxCredentials ? props.passwordConfigured : Boolean(notification.value.smtpPassword || notification.value.passwordConfigured)));
+const senderLabel = computed(() => {
+    const address = notification.value.fromAddress || props.mailUser || tt('Not configured');
+    return `${notification.value.fromName?.trim() || 'ezBookkeeping'} <${address}>`;
+});
 
 watch(() => notification.value.enabled, enabled => { if (enabled && !notification.value.smtpServer) advancedPanel.value = 0; });
 watch(() => [notification.value.useMailboxCredentials, props.mailUser] as const, ([reuse, mailUser]) => { if (reuse) notification.value.smtpUser = mailUser; });

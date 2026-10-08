@@ -15,9 +15,11 @@ func TestEmailBillNotificationDefaultsAreDisabledAndInferFoxmail(t *testing.T) {
 	assert.Equal(t, uint16(465), c.Notification.SMTPPort)
 	assert.Equal(t, c.MailUser, c.Notification.Recipient)
 	assert.True(t, c.Notification.UseMailboxCredentials)
+	assert.Equal(t, "ezBookkeeping", c.Notification.FromName)
 	c.Notification.Enabled = true
 	require.NoError(t, NormalizeEmailBillNotification(c, false))
 	assert.Equal(t, c.MailPassword, EmailBillNotificationSMTP(c).SMTPPasswd)
+	assert.Equal(t, "ezBookkeeping", EmailBillNotificationSMTP(c).FromName)
 }
 
 func TestEmailBillNotificationRejectsHeaderInjectionAndMissingCredentials(t *testing.T) {
@@ -29,4 +31,7 @@ func TestEmailBillNotificationRejectsHeaderInjectionAndMissingCredentials(t *tes
 	require.ErrorContains(t, NormalizeEmailBillNotification(c, false), "mailbox password")
 	c.Notification.UseMailboxCredentials = false
 	require.ErrorContains(t, NormalizeEmailBillNotification(c, false), "SMTP password")
+	c.Notification.UseMailboxCredentials, c.Notification.FromName = true, "账单\r\nBcc: attacker@example.com"
+	c.MailPassword = "secret"
+	require.ErrorContains(t, NormalizeEmailBillNotification(c, false), "sender name")
 }

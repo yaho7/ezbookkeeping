@@ -3006,5 +3006,9 @@
     "Save the mailbox password before enabling notifications": "請先儲存郵箱授權碼，再啟用通知",
     "Enter the SMTP password or reuse the mailbox password": "請填寫寄件授權碼，或使用已連接郵箱的授權碼",
     "Choose a notification condition": "請選擇推送條件",
-    "Cannot read the notification summary": "無法讀取通知彙總"
+    "Cannot read the notification summary": "無法讀取通知彙總",
+    "Sender Name": "寄件名稱",
+    "Defaults to ezBookkeeping.": "留空時使用 ezBookkeeping。",
+    "Enter a valid sender name": "請輸入有效的寄件名稱",
+    "Subject": "主旨"
 }

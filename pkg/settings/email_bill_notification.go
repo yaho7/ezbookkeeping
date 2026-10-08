@@ -17,6 +17,7 @@ type EmailBillNotificationConfig struct {
 	SMTPUser              string
 	SMTPPassword          string
 	FromAddress           string
+	FromName              string
 	UseMailboxCredentials bool
 }
 
@@ -29,6 +30,7 @@ func NormalizeEmailBillNotification(config *EmailBillConfig, requireSending bool
 	n.Mode, n.Recipient = strings.TrimSpace(n.Mode), strings.TrimSpace(n.Recipient)
 	n.SMTPServer, n.SMTPUser = strings.TrimSpace(n.SMTPServer), strings.TrimSpace(n.SMTPUser)
 	n.FromAddress = strings.TrimSpace(n.FromAddress)
+	n.FromName = strings.TrimSpace(n.FromName)
 	if n.Mode == "" {
 		n.Mode = "always"
 	}
@@ -40,6 +42,9 @@ func NormalizeEmailBillNotification(config *EmailBillConfig, requireSending bool
 	}
 	if n.FromAddress == "" {
 		n.FromAddress = config.MailUser
+	}
+	if n.FromName == "" {
+		n.FromName = "ezBookkeeping"
 	}
 	if n.SMTPUser == "" {
 		n.SMTPUser = config.MailUser
@@ -73,6 +78,9 @@ func NormalizeEmailBillNotification(config *EmailBillConfig, requireSending bool
 			return fmt.Errorf("%s", address.label)
 		}
 	}
+	if len([]rune(n.FromName)) > 100 || strings.ContainsAny(n.FromName, "\x00\r\n") {
+		return fmt.Errorf("Enter a valid sender name")
+	}
 	if n.SMTPServer == "" || strings.ContainsAny(n.SMTPServer, " /\\@\x00\r\n") || (strings.Contains(n.SMTPServer, ":") && net.ParseIP(n.SMTPServer) == nil) {
 		return fmt.Errorf("Enter an SMTP server hostname")
 	}
@@ -99,5 +107,5 @@ func EmailBillNotificationSMTP(config *EmailBillConfig) *SMTPConfig {
 	if n.UseMailboxCredentials {
 		password = config.MailPassword
 	}
-	return &SMTPConfig{SMTPHost: net.JoinHostPort(n.SMTPServer, fmt.Sprint(n.SMTPPort)), SMTPUser: n.SMTPUser, SMTPPasswd: password, FromAddress: n.FromAddress}
+	return &SMTPConfig{SMTPHost: net.JoinHostPort(n.SMTPServer, fmt.Sprint(n.SMTPPort)), SMTPUser: n.SMTPUser, SMTPPasswd: password, FromAddress: n.FromAddress, FromName: n.FromName}
 }

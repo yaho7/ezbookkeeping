@@ -3105,5 +3105,9 @@
     "Save the mailbox password before enabling notifications": "请先保存邮箱授权码，再开启通知",
     "Enter the SMTP password or reuse the mailbox password": "请填写发件授权码，或使用已连接邮箱的授权码",
     "Choose a notification condition": "请选择推送条件",
-    "Cannot read the notification summary": "无法读取通知汇总"
+    "Cannot read the notification summary": "无法读取通知汇总",
+    "Sender Name": "发件名称",
+    "Defaults to ezBookkeeping.": "留空时使用 ezBookkeeping。",
+    "Enter a valid sender name": "请输入有效的发件名称",
+    "Subject": "主题"
 }

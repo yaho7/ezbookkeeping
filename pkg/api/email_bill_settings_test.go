@@ -43,19 +43,22 @@ func TestBuildEmailBillConfigAllowsDisablingWithoutCredentials(t *testing.T) {
 }
 
 func TestEmailBillNotificationSecretsStayOnServerAndOldClientsPreserveSettings(t *testing.T) {
-	current := &settings.EmailBillConfig{MailUser: "alice@qq.com", MailPassword: "mail-secret", Notification: &settings.EmailBillNotificationConfig{Mode: "always", SMTPServer: "smtp.qq.com", SMTPPort: 465, SMTPUser: "alice@qq.com", SMTPPassword: "smtp-secret"}}
+	current := &settings.EmailBillConfig{MailUser: "alice@qq.com", MailPassword: "mail-secret", Notification: &settings.EmailBillNotificationConfig{Mode: "always", SMTPServer: "smtp.qq.com", SMTPPort: 465, SMTPUser: "alice@qq.com", SMTPPassword: "smtp-secret", FromName: "账单助手"}}
 	response, err := json.Marshal(emailBillSettingsResponse(current))
 	require.NoError(t, err)
 	assert.NotContains(t, string(response), "mail-secret")
 	assert.NotContains(t, string(response), "smtp-secret")
 	assert.Contains(t, string(response), "passwordConfigured")
+	assert.Contains(t, string(response), "\"fromName\":\"账单助手\"")
 	updated, err := buildEmailBillConfig("alice", &models.EmailBillSettingsUpdateRequest{MailUser: "alice@qq.com"}, current)
 	require.NoError(t, err)
 	assert.Equal(t, "smtp-secret", updated.Notification.SMTPPassword)
+	assert.Equal(t, "账单助手", updated.Notification.FromName)
 	updated.Notification.Mode = "errors_only"
 	assert.Equal(t, "always", current.Notification.Mode)
-	request := &models.EmailBillNotificationSettingsRequest{SMTPServer: "smtp.qq.com", SMTPPort: 465, SMTPUser: "alice@qq.com"}
+	request := &models.EmailBillNotificationSettingsRequest{SMTPServer: "smtp.qq.com", SMTPPort: 465, SMTPUser: "alice@qq.com", FromName: "新的名称"}
 	assert.Equal(t, "smtp-secret", buildEmailBillNotificationConfig(request, current.Notification).SMTPPassword)
+	assert.Equal(t, "新的名称", buildEmailBillNotificationConfig(request, current.Notification).FromName)
 	request.SMTPServer = "smtp.other.example"
 	assert.Empty(t, buildEmailBillNotificationConfig(request, current.Notification).SMTPPassword)
 }

@@ -242,6 +242,7 @@ type SMTPConfig struct {
 	SMTPPasswd        string
 	SMTPSkipTLSVerify bool
 	FromAddress       string
+	FromName          string
 }
 
 // EmailBillConfig represents the built-in email bill importer configuration.
@@ -1090,6 +1091,7 @@ func loadEmailBillConfiguration(config *Config, configFile *ini.File, sectionNam
 		SMTPUser:              getConfigItemStringValue(configFile, sectionName, "notification_smtp_user"),
 		SMTPPassword:          getConfigItemStringValue(configFile, sectionName, "notification_smtp_password"),
 		FromAddress:           getConfigItemStringValue(configFile, sectionName, "notification_from_address"),
+		FromName:              getConfigItemStringValue(configFile, sectionName, "notification_from_name"),
 		UseMailboxCredentials: getConfigItemBoolValue(configFile, sectionName, "notification_use_mailbox_credentials", true),
 	}
 	if err := json.Unmarshal([]byte(getConfigItemStringValue(configFile, sectionName, "folders", "[]")), &emailBillConfig.Folders); err != nil {
