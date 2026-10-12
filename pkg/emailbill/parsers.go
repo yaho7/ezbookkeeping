@@ -13,7 +13,7 @@ var (
 	creditDatePattern        = regexp.MustCompile(`\d{4}/\d{2}/\d{2}`)
 	creditTransactionPattern = regexp.MustCompile(`(?m)(\d{2}:\d{2}:\d{2})[\s\p{Zs}]+CNY[\s\p{Zs}]+(-?\d+(?:\.\d+)?)[\s\p{Zs}]+`)
 	creditCardPrefixPattern  = regexp.MustCompile(`尾号\d+[\s\p{Zs}]*(?:消费|退货|预授权完成)[\s\p{Zs}]*`)
-	shortDatePattern         = regexp.MustCompile(`^(\d{2})月(\d{2})日$`)
+	shortDatePattern         = regexp.MustCompile(`^(\d{1,2})月(\d{1,2})日$`)
 	moneyPattern             = regexp.MustCompile(`^(-?)(\d+)(?:\.(\d+))?$`)
 )
 
@@ -104,6 +104,10 @@ type cmbDebitParser struct {
 func NewCMBDebitParser() Parser {
 	return &cmbDebitParser{rules: []debitRule{
 		{
+			pattern:   regexp.MustCompile(`于(\d{1,2}月\d{1,2}日)他行实时转入(?:人民币)?(\d+(?:\.\d+)?)(?:元)?[，,]余额[^，,。；\r\n]+[，,][ \t]*付方([^，,。；\r\n]+)`),
+			dateGroup: 1, amountGroup: 2, merchantGroup: 3, sign: 1, label: "转入",
+		},
+		{
 			pattern:   regexp.MustCompile(`于(\d{2}月\d{2}日)(\d{2}:\d{2})线上免密支付(?:人民币)?(\d+(?:\.\d+)?)(?:元)?[，,]余额[^，,。；\r\n]+[，,][ \t]*(?:Apple Pay[，,][ \t]*)?(?:线上支付消费[，,][ \t]*)?([^。；\r\n]+)`),
 			dateGroup: 1, timeGroup: 2, amountGroup: 3, merchantGroup: 4, sign: -1, label: "支出",
 		},
@@ -187,7 +191,11 @@ func (p *cmbDebitParser) Parse(text string, receivedAt time.Time) ([]ParsedTrans
 				continue
 			}
 
-			occurredAt, err := transactionDateTime(group(rule.dateGroup), group(rule.timeGroup), receivedAt)
+			timeText := receivedAt.Format("15:04:05")
+			if rule.timeGroup > 0 {
+				timeText = group(rule.timeGroup)
+			}
+			occurredAt, err := transactionDateTime(group(rule.dateGroup), timeText, receivedAt)
 			if err != nil {
 				return nil, err
 			}

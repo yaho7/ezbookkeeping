@@ -1,6 +1,7 @@
 package emailbill
 
 import (
+	"fmt"
 	"testing"
 	"time"
 
@@ -84,6 +85,23 @@ func TestCMBDebitParserParsesMultilineIncomePrefix(t *testing.T) {
 	require.Len(t, transactions, 1)
 	assert.Equal(t, int64(10000), transactions[0].AmountMinor)
 	assert.Equal(t, "工资", transactions[0].Merchant)
+}
+
+func TestCMBDebitParserParsesRecurringOtherBankTransferWithoutTransactionTime(t *testing.T) {
+	parser := NewCMBDebitParser()
+	for _, month := range []time.Month{time.September, time.October} {
+		receivedAt := time.Date(2026, month, 10, 13, 14, 24, 0, testLocation(t))
+		body := fmt.Sprintf("您账户1253于%02d月10日他行实时转入人民币2000.00，余额4209.46，付方示例亲友", month)
+		transactions, err := parser.Parse(body, receivedAt)
+		require.NoError(t, err)
+		require.Len(t, transactions, 1)
+		assert.Equal(t, int64(200000), transactions[0].AmountMinor)
+		assert.Equal(t, "示例亲友", transactions[0].Merchant)
+		assert.Equal(t, receivedAt, transactions[0].OccurredAt)
+	}
+	transactions, err := parser.Parse("您账户1253于10月10日他行实时转出人民币2000.00，余额4209.46，收方示例亲友", time.Now())
+	require.NoError(t, err)
+	assert.Empty(t, transactions)
 }
 
 func TestCMBDebitParserParsesApplePayAndUnionPayNotifications(t *testing.T) {

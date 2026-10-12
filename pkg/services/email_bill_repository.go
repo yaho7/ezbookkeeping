@@ -3,6 +3,7 @@ package services
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"xorm.io/xorm"
@@ -27,11 +28,32 @@ var EmailBillAutomationStore = &EmailBillAutomationRepository{
 	ServiceUsingUuid: ServiceUsingUuid{container: uuid.Container},
 }
 
-// HasMessageFingerprint reports whether this mailbox identity was already accepted.
+const cmbDebitNoOutputRetryTrigger = "cmb_debit_v2"
+
+// HasMessageFingerprint reports whether this identity has a completed processing attempt.
+// Previously unparsed CMB transfers get one retry after the built-in parser update.
 func (r *EmailBillAutomationRepository) HasMessageFingerprint(c core.Context, uid, mailboxID int64, fingerprint string, version uint16) (bool, error) {
-	return r.UserDataDB(uid).NewSession(c).
+	message := &models.EmailBillInboundMessage{}
+	has, err := r.UserDataDB(uid).NewSession(c).
 		Where("uid=? AND mailbox_id=? AND message_fingerprint=? AND fingerprint_version=?", uid, mailboxID, fingerprint, version).
-		Exist(&models.EmailBillInboundMessage{})
+		Get(message)
+	if err != nil || !has {
+		return has, err
+	}
+	latest, found, err := r.latestMessageRun(c, uid, message.MessageId)
+	return !found || !shouldRetryCMBDebitNoOutput(message, latest), err
+}
+
+func (r *EmailBillAutomationRepository) latestMessageRun(c core.Context, uid, messageID int64) (*models.EmailBillImportRun, bool, error) {
+	run := &models.EmailBillImportRun{}
+	found, err := r.UserDataDB(uid).NewSession(c).Where("message_id=?", messageID).
+		OrderBy("started_unix_time desc, import_run_id desc").Get(run)
+	return run, found, err
+}
+
+func shouldRetryCMBDebitNoOutput(message *models.EmailBillInboundMessage, run *models.EmailBillImportRun) bool {
+	return message != nil && run != nil && run.Status == "no_output" && run.TriggerType != cmbDebitNoOutputRetryTrigger &&
+		(strings.Contains(message.BodySummary, "他行实时转入") || strings.Contains(message.BodyContent, "他行实时转入"))
 }
 
 // PurgeRawBodies clears retained message bodies without removing identities or audit evidence.
@@ -55,6 +77,13 @@ func (r *EmailBillAutomationRepository) SaveMessageAndStartRun(c core.Context, i
 		return 0, 0, false, err
 	}
 	if has {
+		previous, found, lookupErr := r.latestMessageRun(c, input.UID, existing.MessageId)
+		if lookupErr != nil {
+			return 0, 0, false, lookupErr
+		}
+		if found && shouldRetryCMBDebitNoOutput(existing, previous) && strings.Contains(input.BodySummary, "他行实时转入") {
+			return r.startCMBDebitNoOutputRetry(c, input.UID, existing.MessageId, previous.ImportRunId)
+		}
 		return existing.MessageId, 0, true, nil
 	}
 
@@ -99,6 +128,42 @@ func (r *EmailBillAutomationRepository) SaveMessageAndStartRun(c core.Context, i
 		return 0, 0, false, err
 	}
 	return message.MessageId, run.ImportRunId, false, nil
+}
+
+func (r *EmailBillAutomationRepository) startCMBDebitNoOutputRetry(c core.Context, uid, messageID, parentRunID int64) (int64, int64, bool, error) {
+	now := time.Now().Unix()
+	run := &models.EmailBillImportRun{
+		ImportRunId: r.GenerateUuid(uuid.UUID_TYPE_EMAIL_BILL), MessageId: messageID,
+		TriggerType: cmbDebitNoOutputRetryTrigger, ParentRunId: parentRunID,
+		Status: "running", StartedUnixTime: now,
+	}
+	inserted := false
+	err := r.UserDataDB(uid).DoTransaction(c, func(sess *xorm.Session) error {
+		latest := &models.EmailBillImportRun{}
+		found, err := sess.Where("message_id=?", messageID).OrderBy("started_unix_time desc, import_run_id desc").Get(latest)
+		if err != nil {
+			return err
+		}
+		if !found || latest.ImportRunId != parentRunID || latest.Status != "no_output" {
+			return nil
+		}
+		if _, err = sess.Insert(run); err != nil {
+			return err
+		}
+		inserted = true
+		_, err = sess.Insert(&models.EmailBillImportRunEvent{
+			EventId: r.GenerateUuid(uuid.UUID_TYPE_EMAIL_BILL), ImportRunId: run.ImportRunId,
+			ToStatus: "running", Reason: "retry previously unparsed CMB transfer", CreatedUnixTime: now,
+		})
+		return err
+	})
+	if err != nil {
+		return 0, 0, false, err
+	}
+	if !inserted {
+		return messageID, 0, true, nil
+	}
+	return messageID, run.ImportRunId, false, nil
 }
 
 // SaveParserRun records one outcome and all validated parser outputs.

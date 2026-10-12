@@ -10,6 +10,7 @@ import (
 
 	"github.com/mayswind/ezbookkeeping/pkg/core"
 	"github.com/mayswind/ezbookkeeping/pkg/emailbill"
+	"github.com/mayswind/ezbookkeeping/pkg/models"
 )
 
 type memoryEmailBillPipelineRepository struct {
@@ -106,6 +107,14 @@ func TestEmailBillPipelineDoesNotRepeatAnAlreadyPersistedMessage(t *testing.T) {
 	assert.Len(t, repository.runs, 1)
 	assert.Len(t, repository.parserRuns, 1)
 	assert.Len(t, repository.candidates, 1)
+}
+
+func TestCMBDebitNoOutputRetryIsLimitedToEarlierUnparsedTransfers(t *testing.T) {
+	message := &models.EmailBillInboundMessage{BodySummary: "您账户1253于10月10日他行实时转入人民币2000.00，余额4209.46，付方示例亲友"}
+	assert.True(t, shouldRetryCMBDebitNoOutput(message, &models.EmailBillImportRun{Status: "no_output", TriggerType: "mailbox"}))
+	assert.False(t, shouldRetryCMBDebitNoOutput(message, &models.EmailBillImportRun{Status: "no_output", TriggerType: cmbDebitNoOutputRetryTrigger}))
+	assert.False(t, shouldRetryCMBDebitNoOutput(message, &models.EmailBillImportRun{Status: "succeeded", TriggerType: "mailbox"}))
+	assert.False(t, shouldRetryCMBDebitNoOutput(&models.EmailBillInboundMessage{BodySummary: "普通消费通知"}, &models.EmailBillImportRun{Status: "no_output", TriggerType: "mailbox"}))
 }
 
 func TestEmailBillPipelineRunsMatchingRulesIndependently(t *testing.T) {
