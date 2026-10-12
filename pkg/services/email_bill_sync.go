@@ -362,10 +362,61 @@ func (s *EmailBillSyncService) record(c core.Context, task *models.EmailBillSync
 			entry.MessageId = inbound.MessageId
 		}
 	}
+	if entry.MessageId > 0 && (event.Status == "duplicate" || event.Status == "succeeded") {
+		outcome, outcomeErr := persistedEmailBillScanOutcome(c, db, task.Uid, entry.MessageId)
+		if outcomeErr != nil {
+			return outcomeErr
+		}
+		if outcome != "" {
+			entry.Status, entry.Reason = outcome, ""
+		}
+	}
 	if has {
 		_, err = db.NewSession(c).ID(entry.EntryId).AllCols().Update(entry)
 	} else {
 		_, err = db.NewSession(c).Insert(entry)
 	}
 	return err
+}
+
+func persistedEmailBillScanOutcome(c core.Context, db *datastore.Database, uid, messageID int64) (string, error) {
+	run := &models.EmailBillImportRun{}
+	found, err := db.NewSession(c).Where("message_id=?", messageID).
+		OrderBy("started_unix_time desc, import_run_id desc").Get(run)
+	if err != nil || !found {
+		return "", err
+	}
+	var candidates []*models.EmailBillCandidate
+	if err = db.NewSession(c).Where("uid=? AND message_id=?", uid, messageID).Find(&candidates); err != nil {
+		return "", err
+	}
+	statuses := make([]string, len(candidates))
+	for index, candidate := range candidates {
+		statuses[index] = candidate.Status
+	}
+	return emailBillScanOutcome(run.Status, statuses), nil
+}
+
+func emailBillScanOutcome(runStatus string, candidateStatuses []string) string {
+	if len(candidateStatuses) == 0 {
+		return runStatus
+	}
+	imported, failed := 0, false
+	for _, status := range candidateStatuses {
+		if status == "imported" {
+			imported++
+		} else if status == "import_failed" {
+			failed = true
+		}
+	}
+	if imported == len(candidateStatuses) {
+		return "imported"
+	}
+	if imported > 0 {
+		return "partial_success"
+	}
+	if failed {
+		return "failed"
+	}
+	return runStatus
 }
